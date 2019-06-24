@@ -1,0 +1,54 @@
+参考地址：https://note.youdao.com/ynoteshare1/index.html?id=3287f13ad5168e6d641fa260518dbeed&type=note
+使用tsinghua（清华的）下载很快
+
+Windows 平台安装spark开发环境--IDEA
+1、安装scala-2.11.8
+    由于 scala-2.11.8 对spark 2.x 的支持最好，所以scala的版本最好选择scala-2.11.8。spark 2.x 不支持scala-2.12.x
+    1、下载 scala-2.11.8 https://downloads.lightbend.com/scala/2.11.8/scala-2.11.8.zip
+        解压 scala-2.11.8.zip 我这里放在E:\spark-idea
+    2、配置环境变量
+        SCALA_HOME = E:\spark-idea\scala-2.11.8
+        Path 最后添加 E:\spark-idea\scala-2.11.8\bin
+    3、验证：
+        新打开一个cmd命令行，直接输入scala -version
+        
+
+2、安装java 8
+    scala-2.11.8 支持jdk8及以上，不支持jdk1.7
+3、安装 maven
+
+5、安装 IDEA
+
+6、配置依赖
+7、配置scala 开发spark
+    在main目录下手动创建scala，包名也需要手动创建
+
+8、安装 spark 为了在本地调试spark 程序做准备，其实并不一定要安装spark
+    下载 spark http://mirrors.tuna.tsinghua.edu.cn/apache/spark/spark-2.3.3/spark-2.3.3-bin-hadoop2.7.tgz 
+    解压至 E:\spark-idea
+    配置环境变量
+    SPARK_HOME = E:\spark-idea\spark-2.3.0-bin-hadoop2.7
+    在 Path 后追加%SPARK_HOME%/bin
+
+    在任意目录下的cmd命令行中，直接执行spark-shell命令，即可开启Spark的交互式命令行模式。
+
+9、安装hadoop
+　  系统变量设置后，就可以在任意当前目录下的cmd中运行spark-shell，但这个时候很有可能会碰到各种错误，
+    这里主要是因为Spark是基于Hadoop的，所以这里也有必要配置一个Hadoop的运行环境。
+
+    1、下载 
+        hadoop各个版本下载： https://hadoop.apache.org/releases.html
+        http://mirrors.tuna.tsinghua.edu.cn/apache/hadoop/common/hadoop-2.7.7/hadoop-2.7.7.tar.gz 
+        解压 至 E:\spark-idea
+    2、配置环境变量
+        HADOOP_HOME= 
+        不需要配置Path
+    3、
+        正常情况下是可以运行成功并进入到Spark的命令行环境下的，但是对于有些用户可能会遇到空指针的错误。
+        这个时候，主要是因为Hadoop的bin目录下没有winutils.exe文件的原因造成的。这里的解决办法是： 
+　　 
+    - 去 https://github.com/steveloughran/winutils/blob/master/hadoop-2.7.1/bin/winutils.exe
+    选择你安装的Hadoop版本号，然后进入到bin目录下，
+    找到winutils.exe文件，下载方法是点击winutils.exe文件，进入之后在页面的右上方部分有一个Download按钮，点击下载即可。 
+
+    - 下载好winutils.exe后，将这个文件放入到Hadoop的bin目录下，我这里是F:\Program Files\hadoop\bin。 
