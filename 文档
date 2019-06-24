@@ -1,0 +1,415 @@
+参考文章；https://blog.csdn.net/u013089961/article/details/52328127
+
+第三章：RDD编程
+RDD创建方式两种：【读取外部数据集和在驱动器程序中对一个集合进行并行化】，后者可以用sc.parallelize()方法
+RDD创建之后支持两种类型的操作：转化和行动。转化操作返回的是RDD类型，行动操作是其他类型。
+
+take(N)获取少量元素，collect()获取整个数据，但不适用于大规模，top()获取前几个元素。
+
+    1、转化操作：
+    map()操作接受一个函数，【用于RDD的每一个元素】，将函数的返回结果作为结果RDD中对应元素的值；
+        相当于对每个元素做某个操作。
+    map的返回值类型不需要和输入类型一样。
+    filter()操作接受一个函数，并将RDD中满足该函数的元素放入新的RDD中返回。
+    flatMap()操作和map类似，应用到每一个元素上，但是返回的是一个返回值序列的迭代器，
+    最终得到的是一个包含各个迭代器可以访问的所有的元素的RDD。
+
+    distinct()转化成只含有不同元素的RDD，但是开销很大；
+    union()操作返回包含两个RDD中所有元素的RDD，不会去掉重复的；
+    intersection()操作返回两个RDD中都有的元素，会去掉重复的元素；
+    subtract()函数返回只存在于第一个RDD不存在于第二个RDD中的元素，去掉重复的。
+    cartesian()计算两个RDD的笛卡尔积，开销巨大。
+
+    管道(pipe)操作：
+
+    spark在RDD上提供了 pipe() 方法。通过pipe()，你可以使用任意语言将RDD中的各元素
+    从标准输入流中以字符串形式读出，并将这些元素执行任何你需要的操作，然后把结果以字符串
+    形式写入标准输出，这个过程就是RDD的转化操作过程。
+
+    使用pipe()的方法很简单，假如我们有一个用其他语言写成的从标准输入接收数据并将处理结果
+    写入标准输出的可执行脚本，我们只需要将该脚本分发到各个节点相同路径下，并将其路径作
+    为pipe()的参数传入即可。
+
+
+    2、行动操作：
+    无输出：
+    foreach()    操作对RDD的每个元素进行操作，而不需要把RDD发回本地（驱动器程序）。
+    HDFS：
+    saveAsTextFile()    函数将数据输出，存储到HDFS的指定目录。
+    saveAsObjectFile()    将分区中的每10个元素组成一个Array，然后将这个Array序列化，写入HDFS为SequenceFile的格式。
+    Scala集合和数据类型：
+    collect()    相当于toArray，toArray已经过时不推荐使用，collect将分布式的RDD返回为一个单机的scala Array数组， 在这个数组上运用scala的函数式操作。
+    collectAsMap()    对（K，V）型的RDD数据返回一个单机HashMap。对于重复K的RDD元素，后面的元素覆盖前面的元素。
+    Lookup()    对（Key，Value）型的RDD操作，返回指定Key对应的元素形成的Seq。
+    count()    返回整个RDD的元素个数。 
+    top()    返回最大的k个元素。
+    take()    返回最小的k个元素。
+    takeOrdered()    返回最小的k个元素， 并且在返回的数组中保持元素的顺序。
+    reduce()    操作接受一个函数作为参数，操作两个相同元素类型的RDD数据并返回一个同样类型的新元素。
+    fold()    和reduce类似，接收函数之外，还提供一个初始值来作为每个分区第一次调用时的结果，应当是单位元素，比如+则是0，*则是1，拼接操作则是空列表。
+    aggregate()    不限制返回类型必须与RDD相同，但同样需要提供返回类型的初始值。
+    aggregate先对每个分区的所有元素进行aggregate操作，再对分区的结果进行fold操作。 
+    aggreagate与fold和reduce的不同之处在于，aggregate相当于采用归并的方式进行数据聚集，这种聚集是并行化的。 而在fold和reduce函数的运算过程中，每个分区中需要进行串行处理，每个分区串行计算完结果，结果再按之前的方式进行聚集，并返回最终聚集结果。
+    countByValue()返回各个元素在RDD中出现的次数，映射表形式。
+
+第四章：键值对操作
+    PairRDD操作：
+    reduceByKey()合并具有相同键的值。
+    mapValues()对pair中每个值应用一个函数而不改变键，flatMapValues类似。
+    keys()返回包含键的RDD；values()返回包含值的RDD。Scala中不用括号。
+    sortByKey()返回根据键排序的RDD。
+    join()操作内连接，只有在两个pair RDD钟都存在的键才能输出。
+    leftOuterJoin和rightOuterJoin()都会根据键连接两个RDD，但是允许结果中存在其中一个RDD所缺失的键。
+
+    并行度调优：Spark提供repartition()函数创建分区，但是代价相对较大，更优化版的是coalesce()函数，可以用rdd.paritions.size查看分区数，默认情况下spark尝试根据集群的大小推断出一个有意义的分区默认值。 
+    Spark可以确保同一组的键出现在同一个节点上。
+
+第五章：数据读取与保存
+    Spark可以访问多种不同的文件格式，包括文本文件、JSON、SequenceFile以及protocol buffer。
+    如果多个输入文件以一个包含数据所有部分的目录的形式出现，可以仍使用textFile函数，传递目录作为参数，
+    这样会把各部分都读取到RDD中。或者可以在输入路径中使用通配字符，例如part-*.txt，大规模数据集通常存放在多个文件中，
+    因此这一特性很有用，尤其是在同一目录中存在一些别的文件（比如成功标记文件）的时候。
+
+    saveAsTextFile()方法接受一个路径，并将RDD中的内容都输入到路径对应的文件中。
+    Spark将传入的路径作为目录看待，会在那个目录下输出多个文件。
+
+    对于大多数Hadoop输出格式来说，我们可以指定一种压缩编解码器来压缩数据，Spark原生的输入方式（textFile和sequenceFile）
+    可以自动处理一些类型的压缩。这些压缩选项只适用于支持压缩的Hadoop格式，也就是写出到文件系统的格式。
+    写入数据库的Hadoop格式一般没有实现压缩支持。
+
+    对于像Spark这样的分布式系统，通常会尝试从多个不同机器上一起读入数据，但有些压缩数据使这变得不太可能，
+    而必须要从单个节点来读入所有数据，可以很容易的从多个节点并行读取的格式被称为“可分割”的格式。
+    gzip    不可分割、压缩速度快、压缩效率高 org.apache.hadoop.io.compress.GzipCodec
+    bzip2  可分割、压缩速度慢、压缩效率非常高、org.apache.hadoop.io.compress.Bzip2Codec
+    zlib     不可分割、压缩速度慢、压缩效率中等、org.apache.hadoop.io.compress.DefaultCodec 是Hadoop的默认压缩编解码器
+
+    3、【Spark支持从本地文件系统读取文件】，要求文件在集群中所有节点的相同路径下都能找到，只需指定输入一个file://路径 
+    例如：”file:///home/holden/happy.gz“
+    推荐的方法是将文件先放到像HDFS这样的共享文件系统上。
+
+    Hadoop分布式文件系统（HDFS）是一种广泛使用的文件系统。Spark和HDFS可以部署在同一批机器上，
+    这样Spark可以利用数据分布来尽量避免一些网络开销。使用HDFS只需要将输入输出路径指定为：hdfs://master:port/path
+
+第六章：Spark编程进阶
+    累加器的用法：
+    累加器是仅仅被相关操作累加的变量，因此可以在并行中被有效地支持。它可以被用来实现计数器和总和。
+    1.SparkContext.accumulator(initialValue)方法，创建累加器，返回值为org.apache.spark.Accumulator[T]对象
+    2.Spark闭包里的执行器代码可以使用累加器的+=方法
+    3.驱动器程序可以调用累加器的value属性来访问累加器的值。
+    Spark原生地只支持数字类型的累加器Int,但是开发人员也可以通过继承AccumulatorParam类来创建它们自己的累加器类型。
+    AccumulatorParam接口有两个方法：
+
+    zero方法为你的类型提供一个0值。
+
+    addInPlace方法将两个值相加。
+
+    累加器是一个只写变量，工作节点上的任务不能访问累加器的值，只有在驱动器程序中可以访问。
+    累加器并没有改变Spark的惰性求值模型。如果它们被RDD上的操作更新，它们的值只有当RDD因为动作操作被计算时才被更新。因此，当执行一个惰性的转换操作，比如map时，不能保证对累加器值的更新被实际执行了。
+
+    广播变量用法：
+    广播变量允许程序员将一个只读的变量缓存在每台机器上，而不用在任务之间传递变量。当我们需要在多个阶段的任务之间使用相同的数据，或者以反序列化形式缓存数据是十分重要的时候，显式地创建广播变量才有用。在创建了广播变量之后，在集群上的所有函数中应该使用它来替代使用v，这样v就不会不止一次地在节点之间传输了。另外为了确保所有的节点获得相同的变量，对象v在被广播之后就不应该再修改。
+    1.通过对一个类型T的对象调用SparkContext.broadcast创建一个Broadcast[T]对象
+    2.通过value属性访问该对象的值
+    3.变量只会背发到各个节点一次，应作为只读值处理。（修改这个值不会影响到别的节点）
+
+    数值RDD操作：
+    Spark的数值操作是通过流式算法实现，允许以每次一个元素的方式构建模型，统计数据会在调用stats（）时通过一次遍历数据计算而来，并以StatsCounter对象返回。
+    count() RDD中元素个数
+    mean() 元素平均值
+    sum() 总和
+    max()min() 最大最小值
+    variance() sampleVariance() 方差 采样中计算的方差
+    stdev() sampleStdec() 标准差 采样中计算的标准差
+    具体的：
+    val dist = ...
+    val stats = dist.stats()
+    val stddev = stats.stdev
+    val mean = stats.mean
+
+第七章：在集群上运行Spark
+    不论使用哪种集群管理器，都可以使用统一脚本spark-submit将应用提交到集群管理器上。
+    1、 在集群上运行Spark应用的详细过程：
+        1.通过spark-submit提交应用
+        2.脚本启动驱动器程序，调用用户定义的main()方法
+        3.驱动器程序与集群管理器通信，申请资源以启动执行器节点
+        4.集群管理器为驱动器程序启动执行器节点
+        5.驱动器进程执行用户应用的操作，根据所定义的对RDD的转化操作和行动操作，驱动器节点把工作以任务的形式发送到执行器进程
+        6.任务在执行器程序中进行计算并保存结果
+        7.如果main方法退出，或者调用了SparkContext.stop()，驱动器程序会中止执行器进程，并通过集群管理器释放资源。
+
+    2、Spark-submit部署应用：
+    当调用submit时除了脚本或JAR包的名字之外【没有别的参数】，那么【程序只会在本地执行】。当
+    希望将应用提交到集群上的时候，可以讲集群地址和希望启动的每个执行器进程的大小作为附加标记。
+        --master指定要连接的集群url：
+        spark://host:port 指定端口的Spark独立集群上 默认7077
+        mesos://host:port 指定端口的Mesos集群，默认5050
+        yarn：连接到YARN集群
+        local 本地模式，单核
+        local[n] 本地模式，N核
+        local[*] 本地模式，尽可能多核
+
+spark-submit的一般格式：
+bin/spark-submit [option] <app jar | python file> [app option]
+[option]是标记列表：
+--master 集群管理器
+--deploy-mode 选择在本地启动（client）驱动器程序还是集群中的一台工作节点机器（cluster）上启动
+--class 运行Scala程序时应用的主类
+--name 应用的显示名
+--jars 需要上传并放到应用的CLASSPATH中的JAR包的列表
+--files 需要放到应用工作目录中的文件的列表，这个参数一般用来放需要分发到各节点的数据文件。
+--executor-memory 执行器进程使用的内存量，512m或15g
+--driver-memory 驱动器进程使用的内存两
+
+<app jar | python file> 表示包含应用入口的JAR包或python脚本
+[app option] 传给应用的选项
+
+代码打包通常使用构建工具生成单个大JAR包，使用最广泛的构建工具是Maven（通常用于java）和sbt（通常用于scala）。
+工程的根目录中，需要创建一个叫做build.sbt的构建文件，源代码放在src/main/scala中。
+
+YARN是hadoop2.0中引入的集群管理器，他可以让多种数据处理框架运行在一个共享的资源池上，并且通常安装在与hadoop文件系统相同的物理节点上，在这样配置的YARN集群上运行spark是很有意义的，可以让spark在存储数据的物理节点上运行，快速访问hdfs数据。
+需要找到你的hadoop配置目录，并把它设置为环境变量HADOOP_CONF_DIR
+
+如果从0开始，可以选择独立集群管理器，安装简单。
+如果要使用sprk的同时使用其他应用，用yarn，对于大多数的hadoop发行版，yarn已经装好了
+任何时候，最好把spark运行在运行hdfs的节点上，能快速访问存储。如果使用yarn，大多数发行版已经把yarn和hdfs装在一起了。
+
+
+第八章：Spark调优与调试
+    对Spark进行性能调优，通常就是修改Spark应用的运行时配置选项，最主要的配置机制就是通过SparkConf类进行配置。
+    Spark中每个配置选项都是基于字符串形式的键值对，可以调用set()方法添加配置项，也有一些工具方法例如setAppname、setMaster()
+    Spark允许通过spark-submit工具动态设置配置项。--master --name --conf --properties-file 
+    同一个配置项可能在多个地方设置，spark有特定的优先级：代码显示调用set > spark-submit > 配置文件 > 系统默认值
+
+    Spark执行时会有下面的流程：
+    1.用户代码定义RDD的有向无环图
+        RDD上的操作会创建出新的RDD，并引用它们的父节点，这样就创建了一个图。
+    2.行动操作把有向无环图强制转译为执行计划
+        当调用RDD的行动操作时，这个RDD就必须被计算。这也要求计算该RDD的父节点。Spark调度器提交一个作业来计算所有必要的RDD。这个作业会包含一个或者多个步骤，每个步骤也就是一波并行执行的计算任务。一个步骤对应有向无环图中的一个或多个RDD，一个步骤对应多个RDD是因为发生了流水线执行。
+    3.任务于集群中调度并执行
+        步骤是按顺序处理的，任务则独立的启动来计算出RDD的一部分。一旦作业的最后一个步骤结束，一个行动操作也就执行完毕。
+
+    日志文件：
+    调试：
+    yarn-container-logs application_ID
+    杀死：
+    yarn application -kill application_ID
+
+    并行度：
+    判断并行度是否过高的标准包括任务是否是几乎在瞬间完成，或者是否观察到任务没有读写任何数据
+    两种并行度调优的方法：1.在数据混洗操作时，使用参数的方式为混洗后的RDD指定并行度，2.对任何已有的RDD，重新分区（repartition()）
+
+    内存管理：
+    默认情况下，Spark会使用60%的空间存储RDD，20%的空间存储数据混洗操作产生的数据，20%的空间留给用户程序。用户可以自行调节这些选项来追求更好的表现性能。
+
+    硬件供给：
+    提供给Spark的硬件资源会显著影响应用的完成时间。影响集群规模的主要参数包括
+    1.分配给每个执行器节点的内存大小 --executor-memory
+    2.每个执行器节点占用的核心数        --executor-cores
+    3.执行器节点总数                            --num-executors
+    4.用来存储临时数据的本地磁盘数量
+    一般来说，更大的内存和更多的计算核心对Spark应用会更有用处。
+    除了内存和CPU核心，Spark还要用到本地磁盘来存储数据混洗操作的中间数据以及溢写到磁盘中的RDD分区数据。因此使用大量的本地磁盘可以帮助提升Spark应用的性能。YARN模式下，提供了指定目录的机制，Spark本地磁盘配置项会直接从YARN的配置中读取。
+    切记“越多越好”的原则在设置执行器节点内存时并不一定适用，使用巨大的堆空间可能会导致垃圾回收的长时间暂停，从而影响Spark作业的吞吐量。有时使用较小内存（比如不超过64GB）的执行器实例可以缓解该问题。
+
+
+第十章：Spark Streaming
+Spark Streaming使用离散化流做抽象表示，叫做DStream。可以从各种输入源创建，比如Flume、Kafka或者HDFS。支持转化操作和输出操作。
+
+import声明：
+import org.apache.spark.streaming.(StreamingContext | StreamingContext._ | dstream.Dstream | Duration | Seconds)
+
+StreamingContext除了会在底层创建出SparkContext之外，构造函数还接受一个批次间隔处理新数据。要开始接收数据，必须显示调用StreamingContext的start()方法，这样SparkStreaming会开始把Spark作业不断交给底层的SparkContext调度执行。执行会在另一个线程中进行，所以需要调用awaitTermination来等待流计算完成，防止应用退出。500ms已经被证实为对许多应用是比较好的最小批次大小。
+
+架构与抽象
+SparkStreaming使用微批次的架构，把流式计算当作一系列连续的小规模批处理来对待，从各个数据源读入数据，按时间间隔创建小批次数据，每个批次形成一个RDD，这样一系列的RDD序列就是DStream。
+
+转化操作
+分为无状态和有状态两种
+无状态：
+批次处理不依赖与之前批次数据，例如map、flatmap、filter、reducebykey、repartition、groupbykey等
+针对键值对的DStream，需要import org.apache.spark.streaming.StreamingContext._才能使用。
+无状态转化操作是分别应用到DStream中的每个RDD上，也即会规约每个时间区间但是不会规约不同区间的数据；也可以整合多个DStream数据，但也是同一时间区间。
+transform()高级函数，提供一个任意RDD到RDD的函数即可转化。
+
+有状态：
+需要使用之前批次数据或者中间结果，主要包括基于滑动窗口和追踪状态变化的操作。
+是跨越时间区间跟踪数据的操作。并且需要在StreamingContext中打开检查点机制来确保容错性。
+基于窗口：
+需要两个参数，窗口时长和滑动步长，都必须是StreamingContext的批次间隔的整数倍。
+最简单的操作是window()函数，其生成的DStream中每个RDD会包含多个批次中的数据，可以对这些数据进行count、transform的操作。
+尽管wndow可以写出所有窗口操作，但Streaming还提供了一些其他的窗口操作，方便高效使用，例如reducebywindow、reducebykeyandwindow等。并且可以提供一个规约函数的逆函数，用于增量计算规约结果，即只计算新加入和刚离开的窗口数据。
+追踪状态：
+updateStateByKey()函数提供了一个对状态变量的访问，用于键值对形式的DStream。给定一个由（键、事件）对构成的DStream，并传递一个制定如何根据新的事件更新每个键对应状态的函数，它可以构建出一个新的DStream，内部数据为（键、状态）对。
+使用该函数，需要提供一个update（events，oldstate）函数，接受与某个键相关的事件以及该键之前的状态，返回新状态。events表示当前批次收到的事件列表，可以为空；oldstate、newstate存放在option内。
+
+输出操作（同RDD行动操作）
+print、save()、foreachRDD，同样是惰性求值
+
+输入源
+所有用来从核心数据源创建DStream的方法都位于StreamingContext中。
+还有附加数据源，这些数据源接收器都作为Streaming的组件进行独立打包，现有的接收器包括twitter、kafka、amazon kinesis、flume等，可以通过添加与Spark版本匹配的Maven工件
+spark-streaming-[projectname]_2.10来引入。
+
+24/7不间断运行
+要不间断运行SparkStreaming应用，需要一些特别的配置。第一步是设置好诸如HDFS或者Amazon s3等可靠系统的检查点机制，还需要考虑驱动器程序的容错性以及对不可靠输入源的处理。
+
+检查点机制主要为以下两个目的服务：
+1.控制发生失败时需要重算的状态数。SparkStreaming可以通过转化图的谱系图来重算状态，检查点机制可以控制需要在转化图中回溯多远。
+2.提供驱动器程序容错。如果流计算应用中驱动器程序奔溃了，可以重启驱动器并让驱动器从检查点恢复，这样Streaming可以读取之前处理进度并继续。
+通过ssc.checkpoint("路径")
+
+驱动器程序容错要求我们以特殊的方式创建StreamingContext。我们需要把检查点目录提供给StreamingContext，与直接调用new StreamingContext不同，应该使用StreamingContext.getOrCreate函数。也即如果第一次运行，则需要创建检查点，之后失败后重启，由于检查点存在，因此直接从检查点目录中初始化StreamingContext即可。
+
+除了用getOrCreate实现初始化代码之外，还需要编写在驱动器程序崩溃时重启驱动器进程的代码。Spark在集群管理器中提供了支持，在提交驱动器程序时使用--supervise标记来让Spark重启失败的驱动器程序。
+
+
+第十一章：MLlib机器学习
+    MLlib设计理念非常简单：把数据以RDD的形式表示，然后再分布式数据集上调用各种算法。大致的步骤如下：
+    1.首先用字符串RDD来表示消息
+    2.运行MLlib中一个特征提取算法把文本数据转化成数值特征，该操作返回一个向量RDD
+    3.对向量RDD调用分类算法，返回一个模型对象，可以使用该对象对新的数据点进行分类
+    4.使用MLlib的评估函数在测试数据集上评估模型
+
+    注意：MLlib只包含能够在集群上运行良好的并行算法，没有包含的算法是不能并行执行的。如果要在许多小规模数据集上训练各机器学习模型，最好是在各节点上用单节点的机器学习算法库。
+    类似的，在机器学习流水线中也常常用同一算法的不同参数对小规模数据集分别训练来选出一组最好的参数。在Spark中可以通过把参数列表传给parallelize()来在不同节点上分别运行不同的参数，而在每个节点上则使用单节点的机器学习库莱实现。
+
+    系统要求：
+    MLlib需要预装一些线性代数库，首先需要安装gfortran运行库，参考网站：http://spark.apache.org/docs/latest/mllib-guide.html
+    其次如果要在python中使用MLlib，需要安装Numpy。
+
+    数据类型：
+    MLlib包含一些特有的数据类型，位于org.apache.spark.mllib包中
+    1.Vector
+        数学向量。可以通过mllib.linalg.Vectors类创建出来
+    2.LabeledPoint
+        用来表示带标签的数据点。包含一个特征向量与一个标签，位置在mllib.regression包中
+    3.Rating
+        用户对一个产品的评分，在mllib.recommendation包中，用于产品推荐
+    4.各种Model类
+        每个Model都是训练算法的结果，一般有一个predict()方法可以用来对新的数据点或数据点组成的RDD应用该模型进行预测
+
+    python中传递Numpy数组都是稠密向量，也可以用vector类创建，但是java和scala中需要使用mllib.linalg.Vectors类创建
+    稠密或稀疏向量。
+    Vectors.dense(一串值或一个数组)
+    Vectors.sparse(4, Array(0,2), Array(1.0,2.0)) <1.0,0.0,2.0,0.0>
+
+    Vector类只用来表示数据，而不提供算数操作，可以使用一些第三方库来进行向量运算，比如Breeze。
+
+    特征提取：
+    mllib.feature包中包含一些用来进行常见特征转化的类。
+
+    TF-IDF：
+    词频-逆文档频率 是一种用来从文本文档中生成特征向量的简单方法。它为文档中的每个词计算两个统计值：
+    1.词频：在文档中出现的次数
+    2.逆文档频率：衡量一个词在整个文档语料库中出现的（逆）频繁程度
+    TF*IDF展示了一个词与特定文档的相关程度。有两个算法可以用来计算TF-IDF：HashingTF和IDF。
+    1.HashingTF要求每个文档都使用对象的可迭代序列来表示。
+        val tf=new HashingTF(numFeatures = $)
+        val tfvectors = tf.transform($).
+    2.IDF基于TF
+        val idf = new IDF()
+        val idfmodel = idf.fit(tfvectors)
+        val tfIdfVectors = idfmodel.transform(tfvectors)
+    由于调用了两次tfvectors，可以将其调用cache()方法缓存。
+
+    缩放：
+    在构建好特征向量后，可以使用StandardScaler类来进行缩放，同时控制均值和标准差。
+    首先创建一个StandardScaler对象，对数据集调用fit()函数来获取一个StandardScalerModel（也即为每一列计算平均值和标准差），
+    然后使用transform()方法缩放一个数据集。
+
+    正规化：
+    Normalize.transform(RDD)即可，默认使用L2归一化，也可以传递一个参数P来使用LP归一化
+
+    Word2vec：
+    在mllib.feature.Word2Vec引入了该算法的实现，具体用法和上面差不多。
+
+    统计：
+    mllib.stat.Statistics包中提供了很多方法。
+    1.Statistics.colStats(RDD)
+    计算向量组成的RDD的统计性综述，包含向量集合每列的最小值、最大值、平均值和方差。
+    2.Statistics.corr(RDD,method)
+    计算向量组成的RDD列间的相关矩阵，使用皮尔森相关活斯皮尔曼相关的一种（method必须是pearson或spearman）
+    3.Statistics.corr(RDD1,RDD2,method)
+    计算两个由浮点值组成的RDD的相关矩阵
+    4.Statistics.chiSqTest(RDD)
+    计算由LabeledPoint对象组成的RDD中每个特征与标签的皮尔森独立性测试结果。其中有p值、测试统计和每个特征的自由度。
+    除此之外，RDD还支持sample()和sampleByKey()，可以构建出简单而分层的数据样本。
+
+    分类与回归：
+    分类和回归都使用labeledpoint类，一个labeledpoint是由一个label（label总是一个double值）和一个feature组成
+    二分类，预期标签为0和1，多分类，预期标签范围是从0~C-1
+    1.线性回归
+    使用mllib.regression.LinearRegressionWithSGD、LassoWithSGD以及RidgeRegressionWithSGD。
+    调优参数：
+    numIterations（默认100次）
+    stepSize（默认1.0 梯度下降的步长）
+    intercept（默认false，是否给数据加上一个干扰特征或者偏差特征，也就是一个值始终为1的特征）
+    regParam（默认1.0，Lasso和ridge的正则化参数）
+    调用：
+    创建一个对象，调用setter方法设置各种参数，调用run()方法来训练模型。run返回的model会带有predict()函数预测单个特征向量。
+
+    2.逻辑回归
+    使用mllib.classification.LogisticRegressionWithLBFGS/SGD
+    接口和线性回归一样。
+    可以通过setThreshold()改变阈值输出0和1（默认为0.5），也可以通过clearThreshold()去除阈值设置，这样predict()返回的是原始得分。
+
+    3.支持向量机
+    SVMWithSGD。
+    参数和线性回归差不多，一样可以使用阈值的方式进行预测。
+
+    4.朴素贝叶斯
+    mllib.classification.NaiveBayes
+    支持一个参数lambda，用来平滑化。
+
+    5.决策树与随机森林
+    mllib.tree.DecisionTree中的trainClassifier()和trainRegressor()方法来训练决策树。
+    参数：
+    data：RDD
+    numClasses：要使用的类别数量
+    impurity：节点的不纯净度度量，分类可以用gini或entropy，回归必须variance
+    maxDepth：树的最大深度（默认5）
+    maxBins：在构建各节点时将数据分到多少个箱子中（推荐32）
+    categoricalFeaturesInfo：一个映射表，指定哪些特征是分类的，以及他们各有多少个分类。
+
+    除了predict之外可以使用toDebugString()来输出这棵树。
+
+    随机森林RandomForest.trainClassifier()和trainRegressor()来使用。
+    除了决策树的参数外还接受：
+    numTrees：树的数量
+    featureSubsetStrategy：每个节点上需要考虑的特征数量。可以使auto、all、sqrt、log2以及onethird。
+    seed：随机数种子
+
+    聚类：
+    kmeans：创建mllib.clustering.KMeans对象，返回一个KMeansModel对象，可以访问聚类中心也可以预测新向量所属聚类
+    参数：
+    initializationMode：初始化中心的方法，可以是k-means||、random，前者结果更好但开销更大
+    maxIterations：最大迭代次数（默认100）
+    runs：算法并发运行的数目
+
+    协同过滤及推荐：
+    交替最小二乘（ALS）：是协同过滤的常用算法，位于mllib.recommendation.ALS类中
+    ALS为每个用户和产品都设一个特征向量，这样用户向量和产品向量的点积接近于他们的得分。
+    参数：
+    rank：特征向量大小（默认10）
+    iterations：迭代次数（默认10）
+    lambda：正则化参数（默认0.01）
+    alpha：用来在隐式ALS中计算置信度的常量（默认值1.0）
+    numUserBlocks，numProductBlocks：切分用户和产品数据的块的数目，用来控制并行度。（默认-1自动决定）
+
+    需要有一个由mllib.recommendation.Rating对象组成的RDD，其中每个包含一个用户ID，一个产品ID和一个评分。
+    ALS返回一个MatrixFactorizationModel对象，可以调用predict来对一个由（userid，productid）组成的RDD进行预测评分。也可以用model.recommendProducts(userid, numProducts)来为给定用户找到前num个推荐产品。
+
+    对于显式评分数据，调用ALS.train()，隐式反馈调用ALS.trainImplicit()。显式预测出来的也是评分，隐式评分代表的是用户与产品发生交互的置信度。
+
+    降维：
+    要使用PCA，首先使用mllib.linalg.distributed.RowMatrix来表示矩阵，存储由vector组成的RDD，每行一个。
+    调用computePrincipalComponents()返回mllib.linalg.Matrix对象，得到投影系数。可以调用toArray方法获取底层数据。
+    接着调用multiply()将原始的RowMatrix投影到低维空间。
+
+    奇异值分解，调用RowMatrix类的computeSVD方法。
+
+    模型评估：
+    mllib.evaluation包中，根据问题的不同，它们在BinaryClassificationMetrics和MulticlassMetrics等不同类中。使用这些类，可以从由（预测、事实）对组成的RDD上创建一个Metrics对象，然后计算精确率、召回率、接受者操作特性ROC曲线下的面积等指标。
+
+    缓存RDD：
+    MLlib大多数算法都是迭代的，对数据进行反复操作。因此把数据集传给MLlib前使用cache()将其缓存起来是很重要的。即使数据在内存中放不下，也应该尝试persist(StorageLevel.DISK_ONLY)
