@@ -1,0 +1,96 @@
+总结：rdd.XXXmethod(匿名函数)
+    Spark 2.2.0 中文文档：http://spark.apachecn.org/#/
+    https://blog.csdn.net/u012185296/article/details/76855770
+
+hbase和hive
+    Hive
+    是基于Hadoop的一个【数据仓库工具】，可以将结构化的数据文件映射为一张数据库表，并提供简单的sql查询功能，
+    可以将sql语句转换为MapReduce任务进行运行。
+
+    Hive适合用来对一段时间内的数据进行分析查询，例如，用来计算趋势或者网站的日志。Hive不应该用来进行实时的查询。
+    因为它需要很长时间才可以返回结果。
+
+    hbase
+    Hbase是一种在Hadoop之上的NoSQL 的Key/vale数据库，一个分布式、可扩展、大数据的存储。
+    Hbase非常适合用来进行大数据的实时查询。
+
+
+spark带有交互式数据分析，可以作即时数据分析。
+进入spark的bin目录，执行spark-shell 不能是spark -shell 也就是不能有空格。
+第二章
+一下在scala shell 下进行交互。
+1、创建rdd
+ val lines = sc.textFile("aa")
+ lines.count() //22
+2、退出ctrl+d  sc.stop
+ rdd.persist();//缓存rdd。
+ cache()与使用默认存储级别的调用persist 是一致的。
+ 将数据写入分布式存储系统，saveAsTextFile()、saveAsSequenceFile();
+
+ 每当调用一个新的行动操作时，整个rdd都会从头开始计算。避免这种低效行为，可以将中间结果持久化。
+
+ 惰性求值意味着，对rdd的转化操作不会立即执行，例如map(),spark会在内部记录下所要求执行操作的
+ 相关信息。记录如何计算数据的指令列表。
+ 把数据读取到rdd同样也是惰性的。在必要的时候才会读取。因此读取数据也有可能多次执行。
+
+ unpersist：手动把持久化的Rdd从缓存删除。
+ 内存不够大的时候，也会把一些好久没有使用的缓存的rdd删除。
+
+第四章 创建rdd
+1、可以通过map将rdd转化为pairRdd
+    val pairs = lines.map(x=>x.split(" ")(0),x)
+并行度调优：
+    每个Rdd有固定数目的分区，分区数决定了在Rdd上执行操作时的并行度。
+    sc.parallelize(data).reduceByKey((x,y)=>x+y, 10);//自定义并行
+    sc.parallelize(data).reduceByKey((x,y)=>x+y)//默认并行。
+
+分区进阶没有看。
+
+第五章 数据的读取与保存
+    1、文本文件
+        1、读取文本文件。
+        val input = sc.textFile("文件目录")。
+        如果是一个目录形式呢，
+            1、可以使用上面的方法，会把整个文件读取。
+            2、可以使用sc.wholeTextFile("目录")，该方法会返回一个pairRDD，其中key 为文件名。
+        2、保存文本文件。
+            rdd.saveAsTextFile("路径")；
+
+    3、json数据
+        1、读取
+        最简单的方式便是将数据作为文本文件读取，然后使用json解析器来对Rdd中的值进行映射操作。
+        如果构建json解析器开销较大，可以使用mapPartitions()来重用解析器。
+
+        如果想跳过格式不正确的数据，应该尝试使用累加器。来根据错误个数。
+    4、csv
+5.3、文件系统
+    spark支持读写很多中文件系统。
+    1、本地/“常规”文件系统
+    spark 支持从本地文件系统读取文件，不过它要求文件在集群中所有节点的相同路径下都可以找到。
+    也就是说，路径相同，而且可以找到。
+    val rdd = sc.textFile("file:///home/aa.gz");
+    如果文件没有放在所有节点上，你可以在驱动器程序中从本地读取该文件而无需使用整个集群。
+    再调用parallelize 将内容分发给工作节点。
+
+    2、
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

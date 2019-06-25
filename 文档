@@ -1,7 +1,9 @@
 参考文章；https://blog.csdn.net/u013089961/article/details/52328127
 
 第三章：RDD编程
+Rdd就是一个不可变得分布式对象集合，每个rdd被分为多个分区，这些分区运行在集群中的不同节点上。
 RDD创建方式两种：【读取外部数据集和在驱动器程序中对一个集合进行并行化】，后者可以用sc.parallelize()方法
+例如：sc.textFile("aa")
 RDD创建之后支持两种类型的操作：转化和行动。转化操作返回的是RDD类型，行动操作是其他类型。
 
 take(N)获取少量元素，collect()获取整个数据，但不适用于大规模，top()获取前几个元素。
@@ -35,15 +37,15 @@ take(N)获取少量元素，collect()获取整个数据，但不适用于大规�
     无输出：
     foreach()    操作对RDD的每个元素进行操作，而不需要把RDD发回本地（驱动器程序）。
     HDFS：
-    saveAsTextFile()    函数将数据输出，存储到HDFS的指定目录。
-    saveAsObjectFile()    将分区中的每10个元素组成一个Array，然后将这个Array序列化，写入HDFS为SequenceFile的格式。
+        saveAsTextFile()    函数将数据输出，存储到HDFS的指定目录。
+        saveAsObjectFile()    将分区中的每10个元素组成一个Array，然后将这个Array序列化，写入HDFS为SequenceFile的格式。
     Scala集合和数据类型：
     collect()    相当于toArray，toArray已经过时不推荐使用，collect将分布式的RDD返回为一个单机的scala Array数组， 在这个数组上运用scala的函数式操作。
     collectAsMap()    对（K，V）型的RDD数据返回一个单机HashMap。对于重复K的RDD元素，后面的元素覆盖前面的元素。
     Lookup()    对（Key，Value）型的RDD操作，返回指定Key对应的元素形成的Seq。
     count()    返回整个RDD的元素个数。 
     top()    返回最大的k个元素。
-    take()    返回最小的k个元素。
+    take(num)    返回num元素。
     takeOrdered()    返回最小的k个元素， 并且在返回的数组中保持元素的顺序。
     reduce()    操作接受一个函数作为参数，操作两个相同元素类型的RDD数据并返回一个同样类型的新元素。
     fold()    和reduce类似，接收函数之外，还提供一个初始值来作为每个分区第一次调用时的结果，应当是单位元素，比如+则是0，*则是1，拼接操作则是空列表。
@@ -61,7 +63,8 @@ take(N)获取少量元素，collect()获取整个数据，但不适用于大规�
     join()操作内连接，只有在两个pair RDD钟都存在的键才能输出。
     leftOuterJoin和rightOuterJoin()都会根据键连接两个RDD，但是允许结果中存在其中一个RDD所缺失的键。
 
-    并行度调优：Spark提供repartition()函数创建分区，但是代价相对较大，更优化版的是coalesce()函数，可以用rdd.paritions.size查看分区数，默认情况下spark尝试根据集群的大小推断出一个有意义的分区默认值。 
+    并行度调优：Spark提供repartition()函数创建分区，但是代价相对较大，更优化版的是coalesce()函数，
+    可以用rdd.paritions.size查看分区数，默认情况下spark尝试根据集群的大小推断出一个有意义的分区默认值。 
     Spark可以确保同一组的键出现在同一个节点上。
 
 第五章：数据读取与保存

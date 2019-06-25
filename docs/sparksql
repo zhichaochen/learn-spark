@@ -1,0 +1,448 @@
+总结：
+    1、Implicits隐式转换（implicit conversion）
+        这种转换，就可以修复程序中的类型错误。
+        参考文档：https://www.jianshu.com/p/84f3e9fb5631
+    2、createOrReplaceTempView
+        createOrReplaceTempView：创建临时视图，此视图的生命周期与用于创建此数据集的[SparkSession]相关联。
+        createGlobalTempView：创建全局临时视图，此时图的生命周期与Spark Application绑定。
+            df.createOrReplaceTempView("tempViewName")
+            df.createGlobalTempView("tempViewName")
+
+        createOrReplaceTempView（）: 创建或替换本地临时视图。
+        此视图的生命周期依赖于SparkSession类，如果想可采用dropTempView删除
+        1、 drop此视图采用dropTempView删除
+            spark.catalog.dropTempView("tempViewName")
+        2、或者 stop() 来停掉 session
+            self.ss = SparkSession(sc)
+            ...
+            self.ss.stop()
+
+
+
+
+
+一、认识SparkSQL
+1、什么是sparksql
+    spark SQL是spark的一个模块，主要用于进行结构化数据的处理。它提供的最核心的编程抽象就是DataFrame。
+2、SparkSQL的作用
+    提供一个编程抽象（DataFrame） 并且作为分布式 SQL 查询引擎
+    DataFrame：它可以根据很多源进行构建，包括：结构化的数据文件，hive中的表，外部的关系型数据库，以及RDD
+3、运行原理
+    将 Spark SQL 转化为 RDD， 然后提交到集群执行
+4、特点
+  （1）容易整合
+  （2）统一的数据访问方式
+  （3）兼容 Hive
+  （4）标准的数据连接
+5、SparkSession
+        SparkSession是Spark 2.0引如的新概念。【SparkSession为用户提供了统一的切入点】，来让用户学习spark的各项功能。
+    在spark的早期版本中，【SparkContext是spark的主要切入点，由于RDD是主要的API】，我们通过sparkcontext来创建和操作RDD。
+    对于每个其他的API，我们需要使用不同的context。例如，对于Streming，我们需要使用StreamingContext；
+    对于sql，使用sqlContext；对于Hive，使用hiveContext。
+
+        但是随着DataSet和DataFrame的API逐渐成为标准的API，就需要为他们建立接入点。
+    所以在spark2.0中，引入SparkSession作为DataSet和DataFrame API的切入点，SparkSession封装了SparkConf、
+    SparkContext和SQLContext。为了向后兼容，SQLContext和HiveContext也被保存下来。
+  　　
+        SparkSession实质上是SQLContext和HiveContext的组合（未来可能还会加上StreamingContext），所以在
+    SQLContext和HiveContext上可用的API在SparkSession上同样是可以使用的。SparkSession内部封装了
+    sparkContext，所以计算实际上是由sparkContext完成的。
+    特点：
+    1、为用户提供一个统一的切入点使用Spark 各项功能
+    2、允许用户通过它调用 DataFrame 和 Dataset 相关 API 来编写程序
+    3、减少了用户需要了解的一些概念，可以很容易的与 Spark 进行交互
+    4、与 Spark 交互之时不需要显示的创建 SparkConf, SparkContext 以及 SQlContext，这些对象已经封闭在 SparkSession 中
+
+6、DataFrames
+    在Spark中，DataFrame是一种以RDD为基础的分布式数据集，类似于传统数据库中的二维表格。
+    DataFrame与RDD的主要区别在于，前者带有schema元信息，即DataFrame所表示的二维表数据集的【每一列都带有名称和类型】。
+
+    这使得Spark SQL得以洞察更多的结构信息，从而对藏于DataFrame背后的数据源以DataFrame之上的变换进行了针对性的优化，
+    最终达到大幅提升运行时效率的目标。反观RDD，由于无从得知所存数据元素的具体内部结构，Spark Core只能在stage层面进行
+    简单、通用的流水线优化。
+
+二、RDD转换成为DataFrame
+    1、 通过 case class 创建 DataFrames（反射）
+        //定义case class，相当于表结构
+        case class People(var name:String,var age:Int)
+        object TestDataFrame1 {
+          def main(args: Array[String]): Unit = {
+            val conf = new SparkConf().setAppName("RDDToDataFrame").setMaster("local")
+            val sc = new SparkContext(conf)
+            val context = new SQLContext(sc)
+            // 将本地的数据读入 RDD， 并将 RDD 与 case class 关联
+            val peopleRDD = sc.textFile("E:\\666\\people.txt")
+              .map(line => People(line.split(",")(0), line.split(",")(1).trim.toInt))
+            import context.implicits._
+            // 将RDD 转换成 DataFrames
+            val df = peopleRDD.toDF
+            //将DataFrames创建成一个临时的视图
+            df.createOrReplaceTempView("people")
+            //使用SQL语句进行查询
+            context.sql("select * from people").show()
+          }
+        }
+
+    2、通过 structType 创建 DataFrames（编程接口）
+        object TestDataFrame2 {
+          def main(args: Array[String]): Unit = {
+            val conf = new SparkConf().setAppName("TestDataFrame2").setMaster("local")
+            val sc = new SparkContext(conf)
+            val sqlContext = new SQLContext(sc)
+            val fileRDD = sc.textFile("E:\\666\\people.txt")
+            // 将 RDD 数据映射成 Row，需要 import org.apache.spark.sql.Row
+            val rowRDD: RDD[Row] = fileRDD.map(line => {
+              val fields = line.split(",")
+              Row(fields(0), fields(1).trim.toInt)
+            })
+            // 创建 StructType 来定义结构
+            val structType: StructType = StructType(
+              //字段名，字段类型，是否可以为空
+              StructField("name", StringType, true) ::
+                StructField("age", IntegerType, true) :: Nil
+            )
+            /**
+              * rows: java.util.List[Row],
+              * schema: StructType
+              * */
+            val df: DataFrame = sqlContext.createDataFrame(rowRDD,structType)
+            df.createOrReplaceTempView("people")
+            sqlContext.sql("select * from people").show()
+          }
+        }
+
+    3、通过 json 文件创建 DataFrames
+      复制代码
+      object TestDataFrame3 {
+        def main(args: Array[String]): Unit = {
+          val conf = new SparkConf().setAppName("TestDataFrame2").setMaster("local")
+          val sc = new SparkContext(conf)
+          val sqlContext = new SQLContext(sc)
+          val df: DataFrame = sqlContext.read.json("E:\\666\\people.json")
+          df.createOrReplaceTempView("people")
+          sqlContext.sql("select * from people").show()
+        }
+      }
+三、DataFrame的read和save和savemode
+    1　数据的读取
+    复制代码
+    object TestRead {
+      def main(args: Array[String]): Unit = {
+        val conf = new SparkConf().setAppName("TestDataFrame2").setMaster("local")
+        val sc = new SparkContext(conf)
+        val sqlContext = new SQLContext(sc)
+        //方式一
+        val df1 = sqlContext.read.json("E:\\666\\people.json")
+        val df2 = sqlContext.read.parquet("E:\\666\\users.parquet")
+        //方式二
+        val df3 = sqlContext.read.format("json").load("E:\\666\\people.json")
+        val df4 = sqlContext.read.format("parquet").load("E:\\666\\users.parquet")
+        //方式三，默认是parquet格式
+        val df5 = sqlContext.load("E:\\666\\users.parquet")
+      }
+    }
+    2　数据的保存
+    object TestSave {
+      def main(args: Array[String]): Unit = {
+        val conf = new SparkConf().setAppName("TestDataFrame2").setMaster("local")
+        val sc = new SparkContext(conf)
+        val sqlContext = new SQLContext(sc)
+        val df1 = sqlContext.read.json("E:\\666\\people.json")
+        //方式一
+        df1.write.json("E:\\111")
+        df1.write.parquet("E:\\222")
+        //方式二
+        df1.write.format("json").save("E:\\333")
+        df1.write.format("parquet").save("E:\\444")
+        //方式三
+        df1.write.save("E:\\555")
+
+      }
+    }
+    3　数据的保存模式
+        df1.write.format("parquet").mode(SaveMode.Ignore).save("E:\\444")
+
+五、数据源
+    1　数据源只json
+    参考3.1
+    2　数据源之parquet
+    参考3.1
+    3、　数据源之Mysql
+      复制代码
+      object TestMysql {
+        def main(args: Array[String]): Unit = {
+          val conf = new SparkConf().setAppName("TestMysql").setMaster("local")
+          val sc = new SparkContext(conf)
+          val sqlContext = new SQLContext(sc)
+
+          val url = "jdbc:mysql://192.168.123.102:3306/hivedb"
+          val table = "dbs"
+          val properties = new Properties()
+          properties.setProperty("user","root")
+          properties.setProperty("password","root")
+          //需要传入Mysql的URL、表明、properties（连接数据库的用户名密码）
+          val df = sqlContext.read.jdbc(url,table,properties)
+          df.createOrReplaceTempView("dbs")
+          sqlContext.sql("select * from dbs").show()
+
+        }
+      }
+    4　数据源之Hive
+        1、添加依赖
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-hive_2.11</artifactId>
+            <version>2.3.0</version>
+        </dependency>
+        2、添加配置文件
+        开发环境则把resource文件夹下添加hive-site.xml文件，集群环境把hive的配置文件要发到$SPARK_HOME/conf目录下
+
+        3、测试代码
+        object TestHive {
+          def main(args: Array[String]): Unit = {
+            val conf = new SparkConf().setMaster("local").setAppName(this.getClass.getSimpleName)
+            val sc = new SparkContext(conf)
+            val sqlContext = new HiveContext(sc)
+            sqlContext.sql("select * from myhive.student").show()
+          }
+        }
+
+==================================================================
+参考文章：https://www.cnblogs.com/followees/p/8909859.html
+一、DataSet和DataFrame
+　　 当使用编程语言对结构化数据进行操作时候，SparkSql中返回的数据类型是DataSet/DataFrame。
+
+    Dataset 是分布式的数据集合。是Spark 1.6中添加的一个新接口，是特定域对象中的强类型集合，它可以使用函数或者相关操作
+    并行地进行转换等操作，数据集可以由JVM对象构造，然后使用函数转换（map、flatmap、filter等）进行操作。
+    Dataset 支持Scala和javaAPI，不支持Python API。
+
+　　 DataFrame是由列组成的数据集，它在概念上等同于关系数据库中的表或R/Python中的data frame，但在查询引擎上进行了丰富的优化。
+    DataFrame可以由各种各样的源构建，例如：结构化数据文件、hive中的表、外部数据库或现有的RDD。
+
+二、SparkSQL基于DataFrame的操作
+    import org.apache.spark.sql.SparkSession
+    val spark = SparkSession
+      .builder()
+      .appName("Spark SQL basic example")
+      .getOrCreate()
+    //引入Spark的隐式类型转换，如将RDD转换成 DataFrame
+    import spark.implicits._
+    val df = spark.read.json("/data/tmp/SparkSQL/people.json")
+    df.show() //将DataFrame的内容进行标准输出
+    //+---+-------+
+    //|age|   name|
+    //+---+-------+
+    //|   |Michael|
+    //| 19|   Andy|
+    //| 30| Justin|
+    //+---+-------+
+
+    df.printSchema()  //打印出DataFrame的表结构
+    //root
+    // |-- age: string (nullable = true)
+    // |-- name: string (nullable = true)
+
+    df.select("name").show()
+    //类似于select name from DataFrame的SQL语句
+
+    df.select($"name", $"age" + 1).show()
+    //类似于select name，age+1 from DataFrame的SQL语句
+    //此处注意，如果对列进行操作，【所有列名前都必须加上$符号】
+
+    df.filter($"age" > 21).show()
+    //类似于select * from DataFrame where age>21 的SQL语句
+
+    df.groupBy("age").count().show()
+    //类似于select age,count(age) from DataFrame group by age;
+
+    //同时也可以直接写SQL进行DataFrame数据的分析
+    df.createOrReplaceTempView("people")
+    val sqlDF = spark.sql("SELECT * FROM people")
+    sqlDF.show()
+
+三、SparkSQL基于DataSet的操作
+　　 由于DataSet吸收了RDD和DataFrame的优点，所有可以同时向操作RDD和DataFrame一样来操作DataSet。看下边一个简单的例子。
+
+    case class Person(name: String, age: Long)
+    // 通过 case类创建DataSet
+    val caseClassDS = Seq(Person("Andy", 32)).toDS()
+    caseClassDS.show()
+    // +----+---+
+    // |name|age|
+    // +----+---+
+    // |Andy| 32|
+    // +----+---+
+
+    // 通过基本类型创建DataSet
+    importing spark.implicits._
+    val primitiveDS = Seq(1, 2, 3).toDS()
+    primitiveDS.map(_ + 1).collect()
+    // Returns: Array(2, 3, 4)
+
+    // 将DataFrames转换成DataSet
+    val path = "examples/src/main/resources/people.json"
+    val peopleDS = spark.read.json(path).as[Person]
+    peopleDS.show()
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
+    DataSet是强类型的，也就是说DataSet的每一列都有指定的列标识符和数据类型。
+
+
+    下边的列子将进一步介绍DataSet与RDD的交互。
+    import spark.implicits._
+    //将RDD转换成DataFrame
+    val peopleDF = spark.sparkContext
+      .textFile("examples/src/main/resources/people.txt")
+      .map(_.split(","))
+      .map(attributes=>Person(attributes(0),attributes(1).trim.toInt))
+      .toDF()
+    // 将RDD注册为一个临时视图
+    peopleDF.createOrReplaceTempView("people")
+    //对临时视图进行Sql查询
+    val teenagersDF = spark.sql("SELECT name, age FROM people WHERE age BETWEEN 13 AND 19")
+
+    // 对teenagersDF 对应的DataFrame进行RDD的算子map操作
+    teenagersDF.map(teenager => "Name: " + teenager(0)).show()
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Justin|
+    // +------------+
+
+    // 与上一条语句效果一样
+    teenagersDF.map(teenager => "Name: " + teenager.getAs[String]("name")).show()
+    // +------------+
+    // |       value|
+    // +------------+
+    // |Name: Justin|
+    // +------------+
+
+四、SparkSQL操作HIve表
+    Spark SQL支持读取和写入存储在Apache HIVE中的数据。然而，由于Hive具有大量的依赖关系，默认情况下这些依赖性不包含在Spark分布
+    中。如果能在classpath路径找到Hive依赖文件，Spark将自动加载它们。另外需要注意的是，这些Hive依赖项须存在于所有
+    Spark的Worker节点上，因为它们需要访问Hive序列化和反序列化库（SerDes），以便访问存储在Hive中的数据。
+
+    import java.io.File
+    import org.apache.spark.sql.{Row, SaveMode, SparkSession}
+
+    case class Record(key: Int, value: String)
+
+    // 设置hive数据库默认的路径
+    val warehouseLocation = new File("spark-warehouse").getAbsolutePath
+
+    val spark = SparkSession
+      .builder()
+      .appName("Spark Hive Example")
+      .config("spark.sql.warehouse.dir", warehouseLocation)
+      .enableHiveSupport()
+      .getOrCreate()
+
+    import spark.implicits._
+    import spark.sql
+
+    //创建hive表，导入数据，并且查询数据
+    sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) USING hive")
+    sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+    sql("SELECT * FROM src").show()
+
+    // +---+-------+
+    // |key|  value|
+    // +---+-------+
+    // |238|val_238|
+    // | 86| val_86|
+    // |311|val_311|
+    // ...
+
+    //对hive表数据进行聚合操作
+    sql("SELECT COUNT(*) FROM src").show()
+    // +--------+
+    // |count(1)|
+    // +--------+
+    // |    500 |
+    // +--------+
+
+    // sql执行的查询结果返回DataFrame类型数据，支持常用的RDD操作
+    val sqlDF = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
+    val stringsDS = sqlDF.map {
+      case Row(key: Int, value: String) => s"Key: $key, Value: $value"
+    }
+    stringsDS.show()
+    // +--------------------+
+    // |               value|
+    // +--------------------+
+    // |Key: 0, Value: val_0|
+    // |Key: 0, Value: val_0|
+    // |Key: 0, Value: val_0|
+    // ...
+
+    // 通过DataFrames创建一个临时视图val recordsDF = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
+    recordsDF.createOrReplaceTempView("records")
+
+    // 查询操作可以将临时的视图与HIve表中数据进行关联查询
+    sql("SELECT * FROM records r JOIN src s ON r.key = s.key").show()
+    // +---+------+---+------+
+    // |key| value|key| value|
+    // +---+------+---+------+
+    // |  2| val_2|  2| val_2|
+    // |  4| val_4|  4| val_4|
+    // |  5| val_5|  5| val_5|
+    // ...
+
+    // 创建一个Hive表，并且以parquet格式存储数据
+    sql("CREATE TABLE hive_records(key int, value string) STORED AS PARQUET")
+    // 讲DataFrame中数据保存到Hive表里
+    val df = spark.table("src")
+    df.write.mode(SaveMode.Overwrite).saveAsTable("hive_records")
+    sql("SELECT * FROM hive_records").show()
+    // +---+-------+
+    // |key|  value|
+    // +---+-------+
+    // |238|val_238|
+    // | 86| val_86|
+    // |311|val_311|
+    // ...
+
+    // 在指定路径创建一个Parquet文件并且写入数据
+    val dataDir = "/tmp/parquet_data"
+    spark.range(10).write.parquet(dataDir)
+    // 创建HIve外部表
+    sql(s"CREATE EXTERNAL TABLE hive_ints(key int) STORED AS PARQUET LOCATION '$dataDir'")
+    sql("SELECT * FROM hive_ints").show()
+    // +---+
+    // |key|
+    // +---+
+    // |  0|
+    // |  1|
+    // |  2|
+    // ...
+
+    // Turn on flag for Hive Dynamic Partitioning
+    spark.sqlContext.setConf("hive.exec.dynamic.partition", "true")
+    spark.sqlContext.setConf("hive.exec.dynamic.partition.mode", "nonstrict")
+    // 通过DataFrame的API创建HIve分区表
+    df.write.partitionBy("key").format("hive").saveAsTable("hive_part_tbl")
+    sql("SELECT * FROM hive_part_tbl").show()
+    // +-------+---+
+    // |  value|key|
+    // +-------+---+
+    // |val_238|238|
+    // | val_86| 86|
+    // |val_311|311|
+    // ...
+
+    spark.stop()
+
+
+
+
+
+
+
+
+
+

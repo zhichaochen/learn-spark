@@ -1,6 +1,6 @@
 package com.wangweimin.learnspark.scala
 
-class ConditionalExpression {
+object ConditionalExpression {
   def main(args: Array[String]): Unit = {
     /**
       * if 语句的使用

@@ -1,6 +1,6 @@
 package com.wangweimin.learnspark.scala
 
-class DefiningVariable {
+object DefiningVariable {
   def main(args: Array[String]): Unit = {
     /**
       * 变量的定义可以用关键字var和val修饰

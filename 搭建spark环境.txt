@@ -1,5 +1,7 @@
 参考地址：https://note.youdao.com/ynoteshare1/index.html?id=3287f13ad5168e6d641fa260518dbeed&type=note
 使用tsinghua（清华的）下载很快
+scala 想要运行main 函数，需要是object
+安装目录不要有空格
 
 Windows 平台安装spark开发环境--IDEA
 1、安装scala-2.11.8
