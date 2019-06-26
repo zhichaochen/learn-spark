@@ -1,0 +1,45 @@
+0、小型
+    fit()：是拟合的意思,就是对
+1、scala中mkstring
+    scala通过mkString方法把一个集合转化为一个字符串
+2、spark中map and flatMap
+    val lineArray = Array("hello you","hello me","hello world")
+    val lines = sc.parallelize(lineArray, 1)
+    val words = lines.flatMap(line =>{ line.split(" ") })
+    words.foreach {
+      word => println(word.mkString)
+    }
+    其中：map的结果为。
+    helloyou
+    hellome
+    helloworld
+
+    flatmap的结果为
+    hello
+    you
+    hello
+    me
+    hello
+    world
+
+    也就是说：map和flatmap会对【集合中的元素】【执行函数中的操作】，
+    map：操作之后【一个元素还是一个元素】。将生成的各个元素合并成一个元素。
+    flatMap：操作之后会【一个元素变成多个元素】。将生成的子元素分别放在了当前的集合。
+
+3、如何将海量字符串映射为数字——
+    StringIndexer & IndexToString
+
+    //将两组数组成一个DataFrame，给出列名"id","category"
+    val df = sqlContext.createDataFrame(
+      Seq((0,"a"),(1,"b"),(2,"c"),(3,"a"),(4,"a"),(5,"c"))
+    ).toDF("id","category")
+
+    //创建一个StringIndexer，设置输入列为"category"，输出列为"categoryIndex"
+    val indexer =newStringIndexer()
+      .setInputCol("category")
+      .setOutputCol("categoryIndex")
+
+    //？？？
+
+    val indexed = indexer.fit(df).transform(df)
+    indexed.show()

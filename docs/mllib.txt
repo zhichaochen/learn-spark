@@ -1,0 +1,158 @@
+四、数据类型
+    MLlib 包含一些特有的数据类型，它们位于 org.apache.spark.mllib 包
+
+    • Vector
+    一个数学向量。MLlib 既支持稠密向量也支持稀疏向量，前者表示向量的每一位都存储
+    下来，后者则只存储非零位以节约空间。
+    向量可以通过 mllib.linalg.Vectors 类创建出来。
+
+    • LabeledPoint
+    在诸如分类和回归这样的监督式学习（supervised learning）算法中，LabeledPoint 用来
+    表示带标签的数据点。它包含一个特征向量与一个标签（由一个浮点数表示），位置在
+    mllib.regression 包中。
+    • Rating
+    用户对一个产品的评分，在 mllib.recommendation 包中，用于产品推荐。
+    • 各种Model类
+    每个 Model 都是训练算法的结果，一般有一个 predict() 方法可以用来对新的数据点或
+    数据点组成的 RDD 应用该模型进行预测。
+
+    大多数算法直接操作由 Vector、LabeledPoint 或 Rating 对象组成的 RDD。你可以用任
+    意方式创建出这些对象，不过一般来说你需要通过对外部数据进行转化操作来构建出
+    RDD——例如，通过读取一个文本文件或者运行一条 Spark SQL 命令。接下来，使用
+    map() 将你的数据对象转为 MLlib 的数据类型。
+
+    1、操作向量
+    向量有两种：稠密向量与稀疏向量。
+    稠密向量：把所有维度的值存放在一个浮点数数组中。
+    稀疏向量：只把各维度中的非零值存储下来。
+    当最多只有 10% 的元素为非零元素时，我们通常更倾向于使用 稀疏向量。
+
+    在 Java 和 Scala 中，都需要使用 mllib.linalg.Vectors 类
+
+    用 Scala 创建向量
+    import org.apache.spark.mllib.linalg.Vectors
+    // 创建稠密向量<1.0, 2.0, 3.0>；Vectors.dense接收一串值或一个数组
+    val denseVec1 = Vectors.dense(1.0, 2.0, 3.0)
+    val denseVec2 = Vectors.dense(Array(1.0, 2.0, 3.0))
+    // 创建稀疏向量<1.0, 0.0, 2.0, 0.0>；该方法只接收
+    // 向量的维度（这里是4）以及非零位的位置和对应的值
+    val sparseVec1 = Vectors.sparse(4, Array(0, 2), Array(1.0, 2.0))
+
+    如果你想在你的程序中进行向量的算术操作，可以使用一些第三方的库，
+    比如 Scala 中的 Breeze或者 Java 中的 MTJ
+
+五、算法
+1　特征提取
+    mllib.feature 包中包含一些用来进行常见特征转化的类。这些类中有从文本（或其他表
+    示）创建特征向量的算法，也有对特征向量进行正规化和伸缩变换的方法。
+    TF-IDF
+    词频—逆文档频率（简称 TF-IDF）是一种用来从文本文档（例如网页）中生成特征向量的简单方法。
+    词频（TF），也就是每个词在文档中出现的次数
+    逆文档频率（IDF），一个词在整个文档语料库中出现的（逆）频繁程度
+    这些值的积，也就是 TF × IDF，展示了一个词与特定文档的相关程度
+
+    比如这个词在某文档中很常见，但在整个语料库中却很少见，说明更相关。
+    说明它是一个更专业的词语。
+
+    MLlib 有两个算法可以用来计算 TF-IDF：HashingTF 和 IDF，都在 mllib.feature 包内。
+    HashingTF 从一个文档中计算出给定大小的词频向量
+
+    而 HashingTF 使用每个单词对所需向量的长度 S 取模得出的哈希值，把所有单词映射到一个 0 到 S-1 之间的数字上。由
+    此我们可以保证生成一个 S 维的向量。在实践中，即使有多个单词被映射到同一个哈希值
+    上，算法依然适用。MLlib 开发者推荐将 S 设置在 218 到 220 之间。
+
+    HashingTF 可以一次只运行于一个文档中，也可以运行于整个 RDD 中
+
+    当你构建好词频向量之后，你就可以使用 IDF 来计算逆文档频率，然后将它们与词频相乘来计算 TF-IDF。
+    你首先要对 IDF 对象调用 fit() 方法来获取一个 IDFModel，它代表语料库中的逆文档频率。
+    接下来，对模型调用 transform() 来把 TF 向量转为 IDF 向量
+
+
+    在 Python 中使用 HashingTF
+    >>> from pyspark.mllib.feature import HashingTF
+    >>> sentence = "hello hello world"
+    >>> words = sentence.split() # 将句子切分为一串单词
+    >>> tf = HashingTF(10000) # 创建一个向量，其尺寸S = 10,000
+    >>> tf.transform(words)
+    SparseVector(10000, {3065: 1.0, 6861: 2.0})
+    >>> rdd = sc.wholeTextFiles("data").map(lambda (name, text): text.split())
+    >>> tfVectors = tf.transform(rdd) # 对整个RDD进行转化操作
+
+    在 Python 中使用 TF-IDF
+    from pyspark.mllib.feature import HashingTF, IDF
+    # 将若干文本文件读取为TF向量
+    rdd = sc.wholeTextFiles("data").map(lambda (name, text): text.split())
+    tf = HashingTF()
+    tfVectors = tf.transform(rdd).cache()
+    # 计算IDF，然后计算TF-IDF向量
+    idf = IDF()
+    idfModel = idf.fit(tfVectors)
+    tfIdfVectors = idfModel.transform(tfVectors)
+
+    注意：们对 RDDtfVectors 调用了 cache() 方法，因为它被使用了两次（一次是训练
+       IDF 模型时，一次是用 IDF 乘以 TF 向量时）。
+
+    1. 缩放
+    大多数机器学习算法都要考虑特征向量中各元素的幅值，并且在特征缩放调整为平等对待时表现得最好（例如所有的特征平均值为 0，标准差为 1）
+    当构建好特征向量之后，你可以使用 MLlib 中的 StandardScaler 类来进行这样的缩放，同时控制均值和标准差。
+    你需要创建一个 StandardScaler，对数据集调用 fit() 函数来获取一个 StandardScalerModel（也
+    就是为每一列计算平均值和标准差），然后使用这个模型对象的 transform() 方法来缩放一个数据集
+
+
+    在 Python 中缩放向量
+    from pyspark.mllib.feature import StandardScaler
+    vectors = [Vectors.dense([-2.0, 5.0, 1.0]), Vectors.dense([2.0, 0.0, 1.0])]
+    dataset = sc.parallelize(vectors)
+    scaler = StandardScaler(withMean=True, withStd=True)
+    model = scaler.fit(dataset)
+    result = model.transform(dataset)
+    # 结果：{[-0.7071, 0.7071, 0.0], [0.7071, -0.7071, 0.0]}
+
+    2. 正规化（归一化）
+    在一些情况下，在准备输入数据时，把向量正规化为长度 1 也是有用的。使用 Normalizer
+    类可以实现，只要使用 Normalizer.transform(rdd) 就可以了。默认情况下，Normalizer 使
+    用 L2 范式（也就是欧几里得距离），不过你可以给 Normalizer 传递一个参数 p 来使用 Lp
+    范式。
+
+    3. Word2Vec
+    Word2Vec Spark 在 mllib.feature.Word2Vec 类中引入了该算法的一个实现。
+
+2　统计
+    MLlib 通过 mllib.stat.Statistics 类中的方法提供了几种广泛使用的统计函数
+    Statistics.colStats(rdd)：保存着向量集合中每列的最小值、最大值、平 均值和方差。
+
+    Statistics.corr(rdd, method)
+    计算由向量组成的 RDD 中的列间的相关矩阵，使用皮尔森相关（Pearson correlation）
+    或斯皮尔曼相关（Spearman correlation）中的一种（method 必须是 pearson 或 spearman
+    中的一个）。
+
+    • Statistics.corr(rdd1, rdd2, method)
+    计算两个由浮点值组成的 RDD 的相关矩阵，使用皮尔森相关或斯皮尔曼相关中的一种
+    （method 必须是 pearson 或 spearman 中的一个）。
+
+    • Statistics.chiSqTest(rdd)
+    计 算 由 LabeledPoint 对 象 组 成 的 RDD 中 每 个 特 征 与 标 签 的 皮 尔 森 独 立 性 测 试
+    （Pearson’s independence test） 结 果。 返 回 一 个 ChiSqTestResult 对 象， 其 中 有 p 值
+    （p-value）、测试统计及每个特征的自由度。标签和特征值必须是分类的（即离散值）。
+
+七、流水线API
+        流水线就是一系列转化数据集的算法（要么是特征转化，要么是模型拟合）。流水线
+    的每个步骤都可能有参数（例如逻辑回归中的迭代次数）。流水线 API 通过使用所选的评
+    估矩阵评估各个集合，使用网格搜索自动找到最佳的参数集。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-package com.wangweimin.learnspark.scala
+package scala
 
 import org.apache.spark.{SparkConf, SparkContext}
 

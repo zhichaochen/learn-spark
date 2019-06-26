@@ -1,0 +1,88 @@
+Spark Streaming 为每个输入源启动对应的接收器。
+接收器以任务的形式运行在应用的执行器进程中，从输入源收集数据并保存为 RDD。
+收集到输入数据后会把数据复制到另一个执行器进程来保障容错性.
+
+有状态转化和无状态转化
+1、无状态转化：
+
+2、有状态转化：
+    DStream 的有状态转化操作是跨时间区间跟踪数据的操作；也就是说，一些先前批次的数
+    据也被用来在新的批次中计算结果。主要的两种类型是滑动窗口和 updateStateByKey()，
+    前者以一个时间阶段为滑动窗口进行操作，后者则用来跟踪每个键的状态变化（例如构建一个代表用户会话的对象）。）
+
+    有状态转化操作需要在你的 StreamingContext 中打开检查点机制来确保容错性
+    设置检查点：ssc.checkpoint("hdfs://...")
+
+    基于窗口的转化操作
+    基于窗口的操作会在一个比 StreamingContext 的批次间隔更长的时间范围内，通过整合多
+    个批次的结果，计算出整个窗口的结果。
+
+    所有基于窗口的操作都需要两个参数，分别为【窗口时长】以及【滑动步长】，两者都必须是
+    StreamContext 的批次间隔的整数倍。
+
+    窗口时长控制每次计算最近的多少个批次的数据。
+    而滑动步长的默认值与批次间隔相等，用来控制对新的 DStream 进行计算的间隔。
+
+    DStream 可以用的最简单窗口操作是 window()，它返回一个新的 DStream 来表示所请
+    求的窗口操作的结果数据。
+
+    换句话说，window() 生成的 DStream 中的每个 RDD 会包含多个
+    批次中的数据，可以对这些数据进行 count()、transform() 等操作
+
+    val accessLogsWindow = accessLogsDStream.window(Seconds(30), Seconds(10))
+    val windowCounts = accessLogsWindow.count()
+
+    reduceByWindow() 和 reduceByKeyAndWindow()
+    让我们可以对每个窗口更高效地进行归约操作
+
+3、输出操作
+    常用的一种调试性输出操作是 print()，它会在每个批次中抓取 DStream 的前十个元素打印出来。
+    ipAddressRequestCount.saveAsTextFiles("outputDir", "txt")
+
+4、输入源
+    1、核心数据源
+        1. 文件流
+            用 Scala 读取目录中的文本文件流
+            val logData = ssc.textFileStream(logDirectory)
+            用 Scala 读取目录中的 SequenceFile 流
+            ssc.fileStream[LongWritable, IntWritable,
+             SequenceFileInputFormat[LongWritable, IntWritable]](inputDirectory).map {
+             case (x, y) => (x.get(), y.get())
+            }
+        2. Akka actor流
+    2　附加数据源
+        1. Apache Kafka
+        在工程中需要引入 Maven 工件 sparkstreaming-kafka_2.10 来使用它。
+        包内提供的 KafkaUtils 对象可以在 StreamingContext 和JavaStreamingContext
+        中以你的 Kafka 消息创建出 DStream。由于 KafkaUtils 可以订阅多
+        个主题，因此它创建出的 DStream 由成对的主题和消息组成。要创建出一个流数据，需
+        要使用 StreamingContext 实例、一个由逗号隔开的 ZooKeeper 主机列表字符串、消费者
+        组的名字（唯一名字），以及一个从主题到针对这个主题的接收器线程数的映射表来调用
+        createStream() 方法，例如：
+
+        import org.apache.spark.streaming.kafka._
+        ...
+        // 创建一个从主题到接收器线程数的映射表
+        val topics = List(("pandas", 1), ("logs", 1)).toMap
+        val topicLines = KafkaUtils.createStream(ssc, zkQuorum, group, topics)
+        StreamingLogInput.processLines(topicLines.map(_._2))
+
+        2. Apache Flume
+            Spark 提供两个不同的接收器来使用 Apache Flume
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

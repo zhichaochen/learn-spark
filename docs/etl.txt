@@ -1,0 +1,33 @@
+参考：https://www.cnblogs.com/yjd_hycf_space/p/7772722.html
+1、介绍
+    ETL是将业务系统的数据经过抽取、清洗转换之后加载到数据仓库的过程。
+    ETL的设计分三部分：数据抽取、数据的清洗转换、数据的加载。
+
+一、 数据的抽取（Extract）
+DW(Data Warehousing
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -223,47 +223,52 @@ import org.apache.spark.streaming.(StreamingContext | StreamingContext._ | dstre
 
 StreamingContext除了会在底层创建出SparkContext之外，构造函数还接受一个批次间隔处理新数据。要开始接收数据，必须显示调用StreamingContext的start()方法，这样SparkStreaming会开始把Spark作业不断交给底层的SparkContext调度执行。执行会在另一个线程中进行，所以需要调用awaitTermination来等待流计算完成，防止应用退出。500ms已经被证实为对许多应用是比较好的最小批次大小。
 
-架构与抽象
-SparkStreaming使用微批次的架构，把流式计算当作一系列连续的小规模批处理来对待，从各个数据源读入数据，按时间间隔创建小批次数据，每个批次形成一个RDD，这样一系列的RDD序列就是DStream。
+    架构与抽象
+    SparkStreaming使用微批次的架构，把流式计算当作一系列连续的小规模批处理来对待，从各个数据源读入数据，
+    按时间间隔创建小批次数据，每个批次形成一个RDD，这样一系列的RDD序列就是DStream。
 
-转化操作
-分为无状态和有状态两种
-无状态：
-批次处理不依赖与之前批次数据，例如map、flatmap、filter、reducebykey、repartition、groupbykey等
-针对键值对的DStream，需要import org.apache.spark.streaming.StreamingContext._才能使用。
-无状态转化操作是分别应用到DStream中的每个RDD上，也即会规约每个时间区间但是不会规约不同区间的数据；也可以整合多个DStream数据，但也是同一时间区间。
-transform()高级函数，提供一个任意RDD到RDD的函数即可转化。
+    转化操作
+    分为无状态和有状态两种
+    无状态：
+    批次处理不依赖与之前批次数据，例如map、flatmap、filter、reducebykey、repartition、groupbykey等
+    针对键值对的DStream，需要import org.apache.spark.streaming.StreamingContext._才能使用。
+    无状态转化操作是分别应用到DStream中的每个RDD上，也即会规约每个时间区间但是不会规约不同区间的数据；也可以整合多个DStream数据，但也是同一时间区间。
+    transform()高级函数，提供一个任意RDD到RDD的函数即可转化。
 
-有状态：
-需要使用之前批次数据或者中间结果，主要包括基于滑动窗口和追踪状态变化的操作。
-是跨越时间区间跟踪数据的操作。并且需要在StreamingContext中打开检查点机制来确保容错性。
-基于窗口：
-需要两个参数，窗口时长和滑动步长，都必须是StreamingContext的批次间隔的整数倍。
-最简单的操作是window()函数，其生成的DStream中每个RDD会包含多个批次中的数据，可以对这些数据进行count、transform的操作。
-尽管wndow可以写出所有窗口操作，但Streaming还提供了一些其他的窗口操作，方便高效使用，例如reducebywindow、reducebykeyandwindow等。并且可以提供一个规约函数的逆函数，用于增量计算规约结果，即只计算新加入和刚离开的窗口数据。
-追踪状态：
-updateStateByKey()函数提供了一个对状态变量的访问，用于键值对形式的DStream。给定一个由（键、事件）对构成的DStream，并传递一个制定如何根据新的事件更新每个键对应状态的函数，它可以构建出一个新的DStream，内部数据为（键、状态）对。
-使用该函数，需要提供一个update（events，oldstate）函数，接受与某个键相关的事件以及该键之前的状态，返回新状态。events表示当前批次收到的事件列表，可以为空；oldstate、newstate存放在option内。
+    有状态：
+    需要使用之前批次数据或者中间结果，主要包括基于滑动窗口和追踪状态变化的操作。
+    是跨越时间区间跟踪数据的操作。并且需要在StreamingContext中打开检查点机制来确保容错性。
+    基于窗口：
+    需要两个参数，窗口时长和滑动步长，都必须是StreamingContext的批次间隔的整数倍。
+    最简单的操作是window()函数，其生成的DStream中每个RDD会包含多个批次中的数据，可以对这些数据进行count、transform的操作。
+    尽管wndow可以写出所有窗口操作，但Streaming还提供了一些其他的窗口操作，方便高效使用，
+    例如reducebywindow、reducebykeyandwindow等。并且可以提供一个规约函数的逆函数，
+    用于增量计算规约结果，即只计算新加入和刚离开的窗口数据。
+    追踪状态：
+    updateStateByKey()函数提供了一个对状态变量的访问，用于键值对形式的DStream。给定一个由（键、事件）对构成的DStream，
+    并传递一个制定如何根据新的事件更新每个键对应状态的函数，它可以构建出一个新的DStream，内部数据为（键、状态）对。
+    使用该函数，需要提供一个update（events，oldstate）函数，接受与某个键相关的事件以及该键之前的状态，返回新状态。
+    events表示当前批次收到的事件列表，可以为空；oldstate、newstate存放在option内。
 
-输出操作（同RDD行动操作）
-print、save()、foreachRDD，同样是惰性求值
+    输出操作（同RDD行动操作）
+    print、save()、foreachRDD，同样是惰性求值
 
-输入源
-所有用来从核心数据源创建DStream的方法都位于StreamingContext中。
-还有附加数据源，这些数据源接收器都作为Streaming的组件进行独立打包，现有的接收器包括twitter、kafka、amazon kinesis、flume等，可以通过添加与Spark版本匹配的Maven工件
-spark-streaming-[projectname]_2.10来引入。
+    输入源
+    所有用来从核心数据源创建DStream的方法都位于StreamingContext中。
+    还有附加数据源，这些数据源接收器都作为Streaming的组件进行独立打包，现有的接收器包括twitter、kafka、amazon kinesis、flume等，可以通过添加与Spark版本匹配的Maven工件
+    spark-streaming-[projectname]_2.10来引入。
 
-24/7不间断运行
-要不间断运行SparkStreaming应用，需要一些特别的配置。第一步是设置好诸如HDFS或者Amazon s3等可靠系统的检查点机制，还需要考虑驱动器程序的容错性以及对不可靠输入源的处理。
+    24/7不间断运行
+    要不间断运行SparkStreaming应用，需要一些特别的配置。第一步是设置好诸如HDFS或者Amazon s3等可靠系统的检查点机制，还需要考虑驱动器程序的容错性以及对不可靠输入源的处理。
 
-检查点机制主要为以下两个目的服务：
-1.控制发生失败时需要重算的状态数。SparkStreaming可以通过转化图的谱系图来重算状态，检查点机制可以控制需要在转化图中回溯多远。
-2.提供驱动器程序容错。如果流计算应用中驱动器程序奔溃了，可以重启驱动器并让驱动器从检查点恢复，这样Streaming可以读取之前处理进度并继续。
-通过ssc.checkpoint("路径")
+    检查点机制主要为以下两个目的服务：
+    1.控制发生失败时需要重算的状态数。SparkStreaming可以通过转化图的谱系图来重算状态，检查点机制可以控制需要在转化图中回溯多远。
+    2.提供驱动器程序容错。如果流计算应用中驱动器程序奔溃了，可以重启驱动器并让驱动器从检查点恢复，这样Streaming可以读取之前处理进度并继续。
+    通过ssc.checkpoint("路径")
 
-驱动器程序容错要求我们以特殊的方式创建StreamingContext。我们需要把检查点目录提供给StreamingContext，与直接调用new StreamingContext不同，应该使用StreamingContext.getOrCreate函数。也即如果第一次运行，则需要创建检查点，之后失败后重启，由于检查点存在，因此直接从检查点目录中初始化StreamingContext即可。
+    驱动器程序容错要求我们以特殊的方式创建StreamingContext。我们需要把检查点目录提供给StreamingContext，与直接调用new StreamingContext不同，应该使用StreamingContext.getOrCreate函数。也即如果第一次运行，则需要创建检查点，之后失败后重启，由于检查点存在，因此直接从检查点目录中初始化StreamingContext即可。
 
-除了用getOrCreate实现初始化代码之外，还需要编写在驱动器程序崩溃时重启驱动器进程的代码。Spark在集群管理器中提供了支持，在提交驱动器程序时使用--supervise标记来让Spark重启失败的驱动器程序。
+    除了用getOrCreate实现初始化代码之外，还需要编写在驱动器程序崩溃时重启驱动器进程的代码。Spark在集群管理器中提供了支持，在提交驱动器程序时使用--supervise标记来让Spark重启失败的驱动器程序。
 
 
 第十一章：MLlib机器学习

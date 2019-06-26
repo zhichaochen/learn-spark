@@ -1,4 +1,4 @@
-package com.wangweimin.learnspark.scala
+package scala
 
 object CircularStatement {
   def main(args: Array[String]): Unit = {

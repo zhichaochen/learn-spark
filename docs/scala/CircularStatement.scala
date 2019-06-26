@@ -1,7 +1,7 @@
-package com.wangweimin.learnspark.scala
+package scala
 
 object CircularStatement {
-  def main(args: Array[String]): Unit = {
+  /*def main(args: Array[String]): Unit = {
     //定义一个数组
     val arr = Array(1,2,3,4,5)
     //遍历数组的中的所有元素
@@ -36,5 +36,5 @@ object CircularStatement {
     for (item <- arr if item % 2 == 0){
       print(item + " ")
     }
-  }
+  }*/
 }

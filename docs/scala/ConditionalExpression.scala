@@ -1,4 +1,4 @@
-package com.wangweimin.learnspark.scala
+package scala
 
 object ConditionalExpression {
   def main(args: Array[String]): Unit = {
