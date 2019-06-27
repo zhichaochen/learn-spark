@@ -1,3 +1,5 @@
+下载spark2.0：http://www.aboutyun.com/forum.php?mod=viewthread&tid=26432&ordertype=1
+
 Spark部署方式
 1、Local模式
     Local模式就是运行在一台计算机上的模式，通常就是用于在本机上练手和测试。它可以通过以下集中方式设置master。

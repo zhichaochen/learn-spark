@@ -437,12 +437,153 @@
 
     spark.stop()
 
+============================================================================
+参考：https://www.cnblogs.com/wujiadong2014/p/6516632.html
+初识sparksql :https://www.cnblogs.com/itboys/p/6676858.html
+
+1、创建DataFrame
+    数据文件students.json
+
+    {"id":1, "name":"leo", "age":18}
+    {"id":2, "name":"jack", "age":19}
+    {"id":3, "name":"marry", "age":17}
+
+    spark-shell里创建DataFrame
+
+    //将文件上传到hdfs目录下
+    hadoop@master:~/wujiadong$ hadoop fs -put students.json /student/2016113012/spark
+    //启动spark shell
+    hadoop@slave01:~$ spark-shell
 
 
+    //导入SQLContext
+    scala> import org.apache.spark.sql.SQLContext
+    import org.apache.spark.sql.SQLContext
+    //声明一个SQLContext的对象，以便对数据进行操作
+    scala> val sql = new SQLContext(sc)
+    warning: there was one deprecation warning; re-run with -deprecation for details
+    sql: org.apache.spark.sql.SQLContext = org.apache.spark.sql.SQLContext@27acd9a7
+    //读取数据
+    scala> val students = sql.read.json("hdfs://master:9000/student/2016113012/spark/students.json")
+    students: org.apache.spark.sql.DataFrame = [age: bigint, id: bigint ... 1 more field]
+    //显示数据
+    scala> students.show
+    +---+---+-----+
+    |age| id| name|
+    +---+---+-----+
+    | 18|  1|  leo|
+    | 19|  2| jack|
+    | 17|  3|marry|
+    +---+---+-----+
+
+    //直接使用spark SQL进行查询
+    //先注册为临时表
+    df.createOrReplaceTempView("std");
+    Dataset<Row> sqlDF = sql.sql("SELECT * FROM std").show;
+
+2、DataFrame常用操作
+    scala> students.show
+    +---+---+-----+
+    |age| id| name|
+    +---+---+-----+
+    | 18|  1|  leo|
+    | 19|  2| jack|
+    | 17|  3|marry|
+    +---+---+-----+
+
+    scala> students.printSchema
+    root
+     |-- age: long (nullable = true)
+     |-- id: long (nullable = true)
+     |-- name: string (nullable = true)
 
 
+    scala> students.select("name").show
+    +-----+
+    | name|
+    +-----+
+    |  leo|
+    | jack|
+    |marry|
+    +-----+
+
+    scala> students.select(col("name"),col("age")+1).show
+    +-----+---------+
+    | name|(age + 1)|
+    +-----+---------+
+    |  leo|       19|
+    | jack|       20|
+    |marry|       18|
+    +-----+---------+
+
+    scala> students.filter(col("age")>18).show
+    +---+---+----+
+    |age| id|name|
+    +---+---+----+
+    | 19|  2|jack|
+    +---+---+----+
 
 
+    scala> students.groupBy("age").count().show
+    +---+-----+
+    |age|count|
+    +---+-----+
+    | 19|    1|
+    | 17|    1|
+    | 18|    1|
+    +---+-----+
+
+3、两种方式将RDD转换成DataFrame
+
+    1）基于反射方式
+    object RDDDataFrameReflection {
+      def main(args: Array[String]): Unit = {
+        val conf = new SparkConf().setAppName("rdddatafromareflection")
+        val sc = new SparkContext(conf)
+        val sqlContext = new SQLContext(sc)
+        val fileRDD = sc.textFile("hdfs://master:9000/student/2016113012/data/students.txt")
+        val lineRDD = fileRDD.map(line => line.split(","))
+        //将RDD和case class关联
+        val studentsRDD = lineRDD.map(x => Students(x(0).toInt,x(1),x(2).toInt))
+        //在scala中使用反射方式，进行rdd到dataframe的转换，需要手动导入一个隐式转换
+        import sqlContext.implicits._
+        val studentsDF = studentsRDD.toDF()
+        //注册表
+        studentsDF.registerTempTable("t_students")
+        val df = sqlContext.sql("select * from t_students")
+        df.rdd.foreach(row => println(row(0)+","+row(1)+","+row(2)))
+        df.rdd.saveAsTextFile("hdfs://master:9000/student/2016113012/data/out")
 
 
+      }
 
+    }
+    //放到外面
+    case class Students(id:Int,name:String,age:Int)
+
+    2）编程接口方式
+    object RDDDataFrameBianchen {
+      def main(args: Array[String]): Unit = {
+        val conf = new SparkConf().setAppName("RDDDataFrameBianchen")
+        val sc = new SparkContext(conf)
+        val sqlContext = new SQLContext(sc)
+        //指定地址创建rdd
+        val studentsRDD = sc.textFile("hdfs://master:9000/student/2016113012/data/students.txt").map(_.split(","))
+        //将rdd映射到rowRDD
+        val RowRDD = studentsRDD.map(x => Row(x(0).toInt,x(1),x(2).toInt))
+        //以编程方式动态构造元素据
+        val schema = StructType(
+          List(
+            StructField("id",IntegerType,true),
+            StructField("name",StringType,true),
+            StructField("age",IntegerType,true)
+          )
+        )
+        //将schema信息映射到rowRDD
+        val studentsDF = sqlContext.createDataFrame(RowRDD,schema)
+        //注册表
+        studentsDF.registerTempTable("t_students")
+        val df = sqlContext.sql("select * from t_students order by age")
+        df.rdd.collect().foreach(row => println(row))
+      }
+    }

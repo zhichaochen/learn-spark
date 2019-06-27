@@ -1,0 +1,141 @@
+参考：https://blog.csdn.net/gongxifacai_believe/article/details/81151090
+windows下环境搭建：https://blog.csdn.net/m0_38075425/article/details/81281960
+
+2、HBase功能
+HBase是一种Hadoop 数据库，用于存储数据和检索数据。与RDBMS 相比，HBase可以存储海量数据，数据条目数可达上亿条，可以准实时检索，检索的速度达到秒级别。HBase是基于HDFS的，具有HDFS的优势：存在多个副本，数据安全性高，普通商用PC或Server就可以，而RDBMS的服务器都很贵。
+3、HBase表的设计
+HBase是一种列式存储的数据库，也是一种NOSQL数据库（NOSQL = Not Only SQL），每一列可以存放多个版本的值，表中每条数据有唯一的标识符，即rowkey，就是这一条数据的主键。
+每条数据的构成格式：rowkey + columnfamily + column01 + timestamp ： value => cell。cell中用字节数组进行存储，可使用工具类Bytes进行字节数组和其他类型的转换。
+
+
+
+参考（介绍的很全面）：https://blog.csdn.net/qq_36932624/article/details/81809566
+比较简洁：https://www.cnblogs.com/qingyunzong/p/8665698.html
+概念：
+    Hbase是Hadoop Database的简称
+    Hbase是分布式、面向列的开源数据库（其实准确的说是面向列族）。
+    HDFS为Hbase提供可靠的底层数据存储服务，MapReduce为Hbase提供高性能的计算能力，Zookeeper为Hbase提供稳定服务和
+    Failover机制，因此我们说Hbase是一个通过大量廉价的机器解决海量数据的高速存储和读取的分布式数据库解决方案。
+
+    列式存储其实说的是列族存储，Hbase是根据列族来存储数据的。列族下面可以有非常多的列，列族在创建表的时候就必须指定
+    Hbase使用Rowkey来唯一的区分某一行的数据。
+
+HBase 这个 NoSQL 数据库的要点
+    ① 它介于 NoSQL 和 RDBMS 之间，仅能通过主键(rowkey)和主键的 range 来检索数据
+
+    ② HBase 查询数据功能很简单，不支持 join 等复杂操作
+
+    ③ 不支持复杂的事务，只支持行级事务(可通过 hive 支持来实现多表 join 等复杂操作)。
+
+    ④ HBase 中支持的数据类型：byte[]（底层所有数据的存储都是字节数组）
+
+    ⑤ 主要用来存储结构化和半结构化的松散数据。
+
+HBase 中的表特点
+    1、大：一个表可以有上十亿行，上百万列
+
+    2、面向列：面向列(族)的存储和权限控制，列(簇)独立检索。
+
+    3、稀疏：对于为空(null)的列，并不占用存储空间，因此，表可以设计的非常稀疏。
+
+    4、无模式：每行都有一个可排序的主键和任意多的列，列可以根据需要动态的增加，同一 张表中不同的行可以有截然不同的列
+
+3、rowkey
+    mysql中的主键是完全一样的，Hbase使用Rowkey来唯一的区分某一行的数据。
+
+    由于Hbase只支持3中查询方式：
+    1、基于Rowkey的单行查询
+    2、基于Rowkey的范围扫描
+    3、全表扫描
+    因此，Rowkey对Hbase的性能影响非常大，Rowkey的设计就显得尤为的重要。设计的时候要兼顾基于Rowkey的单行查询
+    也要键入Rowkey的范围扫描。Rowkey的设计极为重要。
+
+3、Region的概念
+    Region是一种分区的概念。
+    Hbase会将一个大表的数据基于Rowkey的不同范围分配到不通的Region中，每个Region负责一定范围的数据访问和存储。
+    这样即使是一张巨大的表，由于被切割到不通的region，访问起来的时延也很低。
+4、TimeStamp的概念
+    TimeStamp对Hbase来说至关重要，因为它是实现Hbase多版本的关键。
+    在Hbase中使用不同的timestame来【标识相同rowkey行】对应的【不通版本的数据】。
+    如果用户没有指定对应的timestamp，Hbase会自动添加一个timestamp，timestamp和服务器时间保持一致
+    相同rowkey的数据按照timestamp倒序排列。默认查询的是最新的版本，用户可同指定timestamp的值来读取旧版本的数据。
+5、ColumnFamily的概念
+    Hbase通过列族划分数据的存储，列族下面可以包含任意多的列，实现灵活的数据存取。
+    就像是家族的概念，我们知道一个家族是由于很多个的家庭组成的。列族也类似，列族是由一个一个的列组成（任意多）。
+
+    Hbase表的创建的时候就必须指定列族。就像关系型数据库创建的时候必须指定具体的列是一样的。
+
+    Hbase的列族不是越多越好，官方推荐的是列族最好小于或者等于3。我们使用的场景一般是1个列族。
+
+四、Hbase的架构
+    4.1、Client
+
+    Client包含了访问Hbase的接口，另外Client还维护了对应的cache来加速Hbase的访问，比如cache的.META.元数据的信息。
+
+    4.2、Zookeeper
+
+    Hbase通过Zookeeper来做master的高可用、RegionServer的监控、元数据的入口以及集群配置的维护等工作。具体工作如下：
+
+    通过Zoopkeeper来保证集群中只有1个master在运行，如果master异常，会通过竞争机制产生新的master提供服务
+
+    通过Zoopkeeper来监控RegionServer的状态，当RegionSevrer有异常的时候，通过回调的形式通知Master RegionServer上下限的信息
+
+    通过Zoopkeeper存储元数据的统一入口地址
+
+    4.3、Hmaster
+
+    master节点的主要职责如下：
+
+    为RegionServer分配Region
+
+    维护整个集群的负载均衡
+
+    维护集群的元数据信息
+
+    发现失效的Region，并将失效的Region分配到正常的RegionServer上
+
+    当RegionSever失效的时候，协调对应Hlog的拆分
+
+    4.4、HregionServer
+
+    HregionServer直接对接用户的读写请求，是真正的“干活”的节点。它的功能概括如下：
+
+    管理master为其分配的Region
+
+    处理来自客户端的读写请求
+
+    负责和底层HDFS的交互，存储数据到HDFS
+
+    负责Region变大以后的拆分
+
+    负责Storefile的合并工作
+
+    4.5、HDFS
+
+    HDFS为Hbase提供最终的底层数据存储服务，同时为Hbase提供高可用（Hlog存储在HDFS）的支持，具体功能概括如下：
+
+    提供元数据和表数据的底层分布式存储服务
+
+    数据多副本，保证的高可靠和高可用性
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,135 @@
+参考：https://www.cnblogs.com/edisonchou/p/4426096.html
+一、Hive：一个牛逼的数据仓库
+1.1 神马是Hive？
+　　 Hive 是建立在 Hadoop 基础上的数据仓库基础构架。
+    它提供了一系列的工具，可以用来进行数据提取转化加载（ETL），
+    这是一种可以存储、查询和分析存储在 Hadoop 中的大规模数据的机制。
+    Hive 定义了简单的类 SQL  查询语言，称为 QL ，它允许熟悉 SQL  的用户查询数据。
+    同时，这个语言也允许熟悉 MapReduce 开发者的开发自定义的 mapper  和 reducer 来处理内建的
+    mapper 和 reducer  无法完成的复杂的分析工作。
+
+    Hive 是 SQL解析引擎，它将SQL语句转译成Map/Reduce Job然后在Hadoop执行。
+    Hive的表其实就是HDFS的目录，按表名把文件夹分开。如果是分区表，则分区值是子文件夹，可以直接在Map/Reduce Job里使用这些数据。
+
+1.2 Hive的系统结构
+    HDFS和Mapreduce是Hive架构的根基。Hive架构包括如下组件：CLI（command line interface）、JDBC/ODBC、
+    Thrift Server、WEB GUI、metastore和Driver(Complier、Optimizer和Executor).
+    这些组件可以分为两大类：服务端组件和客户端组件。
+
+    Hive 的数据存储在 HDFS 中，大部分的查询由 MapReduce 完成
+    （包含 * 的查询，比如 select * from table 不会生成 MapRedcue 任务）
+
+二、Hive的基本安装
+    1）下载hive安装包
+    2、开始安装
+      　　（1）解压： tar -zvxf hive-0.9.0.tar.gz ，重命名：mv hive-0.9.0 hive
+
+      　　（2）加入环境变量配置文件中：vim /etc/profile
+
+      export HIVE_HOME=/usr/local/hive
+
+      export PATH=.:$HADOOP_HOME/bin:$HIVE_HOME/bin:$PIG_HOME/bin:$HBASE_HOME/bin:$ZOOKEEPER_HOME/bin:$JAVA_HOME/bin:$PATH　
+
+    最后当然别忘了使环境变量生效：source /etc/profile
+
+    3、配置Hive
+    4、安装MySQL
+    5、使用 MySQL 作为 Hive 的 metastore：
+        Step 2.5.1:
+
+        把mysql的jdbc驱动放置到hive的lib目录下：cp mysql-connector-java-5.1.10.jar /usr/local/hive/lib
+
+        Step 2.5.2:
+
+        修改hive-site.xml文件，修改内容如下：
+
+        <property>
+        　　<name>javax.jdo.option.ConnectionURL</name>
+        　　<value>jdbc:mysql://hadoop-master:3306/hive?createDatabaseIfNotExist=true</value>
+        </property>
+        <property>
+        　　<name>javax.jdo.option.ConnectionDriverName</name>
+        　　<value>com.mysql.jdbc.Driver</value>
+        </property>
+        <property>
+        　　<name>javax.jdo.option.ConnectionUserName</name>
+        　　<value>root</value>
+        </property>
+        <property>
+        　　<name>javax.jdo.option.ConnectionPassword</name>
+        　　<value>admin</value>
+        </property>
+
+三、Hive的基本使用
+1、启动hadoop
+    HDFS和Mapreduce是Hive架构的根基。因此，我们得先启动Hadoop，才能正确使用Hive。
+
+2、Hive的CLI命令行接口
+    （1）内部表
+    内部表：与数据库中的 Table 在概念上是类似，每一个 Table 在 Hive 中都有一个相应的目录存储数据。
+    例如，一个表 test，它在 HDFS 中的路径为：/ warehouse/test。
+    warehouse是在 hive-site.xml 中由 ${hive.metastore.warehouse.dir} 指定的数据仓库的目录；
+
+    创建表
+    hive>CREATE TABLE t1(id int); // 创建内部表t1，只有一个int类型的id字段
+    hive>CREATE TABLE t2(id int, name string) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
+    // 创建内部表t2，有两个字段，它们之间通过tab分隔
+
+    加载数据
+    hive>LOAD DATA LOCAL INPATH '/root/id' INTO TABLE t1; // 从本地文件加载
+    hive>LOAD DATA INPATH '/root/id' INTO TABLE t1; // 从HDFS中加载
+
+    查看数据
+    hive>select * from t1; // 跟SQL语法类似
+    hive>select count(*) from t1; // hive也提供了聚合函数供使用
+
+    删除表
+    hive>drop table t1;
+
+    （2）分区表：
+    所谓分区（Partition） 对应于数据库的 Partition 列的密集索引。
+    在 Hive 中，表中的一个 Partition 对应于表下的一个目录，所有的 Partition 的数据都存储在对应的目录中。
+    例如：test表中包含 date 和 city 两个 Partition，则对应于date=20130201, city = bj
+    的 HDFS 子目录为：/warehouse/test/date=20130201/city=bj。
+    而对应于date=20130202, city=sh 的HDFS 子目录为：/warehouse/test/date=20130202/city=sh。
+
+    （3）桶表（Hash 表）：桶表是对数据进行哈希取值，然后放到不同文件中存储。数据加载到桶表时，会对字段取hash值，
+    然后与桶的数量取模。把数据放到对应的文件中
+    4）外部表：它和 内部表 在元数据的组织上是相同的，而实际数据的存储则有较大的差异。
+    外部表主要指向已经在 HDFS 中存在的数据，可以创建 Partition。
+
+    外部表与内部表的差异：
+    ①内部表 的创建过程和数据加载过程（这两个过程可以在同一个语句中完成），在加载数据的过程中，实际数据会被移动到数据仓库目录中；
+    之后对数据对访问将会直接在数据仓库目录中完成。删除表时，表中的数据和元数据将会被同时删除；
+    ②外部表 只有一个过程，加载数据和创建表同时完成，并不会移动到数据仓库目录中，只是与外部数据建立一个链接。
+    当删除一个 外部表 时，仅删除该链接；
+
+    （5）视图操作：和关系数据库中的视图一个概念，可以向用户集中展现一些数据，屏蔽一些数据，提高数据库的安全性。
+    （6）查询操作：在Hive中，查询分为三种：基于Partition的查询、LIMIT Clause查询、Top N查询。
+    （7）连接操作：和关系型数据库中的各种表连接操作一样，在Hive中也可以进行表的内连接、外连接一类的操作：
+
+3、Hive的Java API接口
+    （1）准备工作
+        ①在服务器端启动Hive外部访问服务
+        ②导入Hive的相关jar包集合
+    2）第一个Hive程序：读取我们刚刚创建的内部表t1
+        public static void main(String[] args) throws Exception {
+            Class.forName("org.apache.hadoop.hive.jdbc.HiveDriver");
+            Connection con = DriverManager.getConnection(
+                    "jdbc:hive://hadoop-master/default", "", "");
+            Statement stmt = con.createStatement();
+            String querySQL = "SELECT * FROM default.t1";
+
+            ResultSet res = stmt.executeQuery(querySQL);
+
+            while (res.next()) {
+                System.out.println(res.getString(1));
+            }
+        }
+
+
+
+
+
+
+

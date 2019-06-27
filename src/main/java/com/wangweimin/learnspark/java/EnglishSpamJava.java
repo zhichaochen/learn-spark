@@ -38,7 +38,8 @@ public class EnglishSpamJava {
                 .builder()
                 .config(conf)
                 .getOrCreate();
-        JavaRDD<String> lines = jsc.textFile("C:\\Users\\asus\\Desktop\\data\\spam_ham.txt");
+
+        JavaRDD<String> lines = jsc.textFile("C:\\bigdata\\spam_ham.txt");
         RDD<Row> rowRDD = lines.map(new Function<String, Row>() {
             public Row call(String v1) throws Exception {
                 String[] arr = v1.split("\t");
@@ -65,9 +66,9 @@ public class EnglishSpamJava {
         Pipeline pip = new Pipeline().setStages(pp);
         // 拟合数据，产生模型
         PipelineModel model = pip.fit(data);
-        File file = new File("C:\\Users\\asus\\Desktop\\data\\email\\english\\model");
+        File file = new File("C:\\bigdata\\model");
         if(file.list().length == 1){
-            model.save("C:\\Users\\asus\\Desktop\\data\\email\\english\\model\\java");
+            model.save("C:\\bigdata\\model\\java");
         }
 
         // 模拟产生数据集进行测试

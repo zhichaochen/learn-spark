@@ -1,5 +1,5 @@
 0、小型
-    fit()：是拟合的意思,就是对
+    fit()：调用fit来训练一个模型。
 1、scala中mkstring
     scala通过mkString方法把一个集合转化为一个字符串
 2、spark中map and flatMap
