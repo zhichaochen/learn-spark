@@ -1,0 +1,159 @@
+参考：https://blog.csdn.net/u013411339/article/details/92759891
+一、Spark SQL的概念理解
+    Spark SQL是spark套件中一个模板，它【将数据的计算任务】通过【SQL的形式转换成了RDD】的计算，
+    类似于Hive通过SQL的形式将数据的计算任务转换成了MapReduce。
+1、Spark SQL的特点：
+  1、和Spark Core的无缝集成，可以在写整个RDD应用的时候，配置Spark SQL来完成逻辑实现。
+  2、统一的数据访问方式，Spark SQL提供标准化的SQL查询。
+  3、Hive的继承，Spark SQL通过内嵌的hive或者连接外部已经部署好的hive案例，实现了对hive语法的继承和操作。
+  4、标准化的连接方式，Spark SQL可以通过启动thrift Server来支持JDBC、ODBC的访问，将自己作为一个BI Server使用
+
+2、Spark SQL数据抽象：
+  1、RDD(Spark1.0)->DataFrame(Spark1.3)->DataSet(Spark1.6)
+  2、Spark SQL提供了DataFrame和DataSet的数据抽象
+  3、DataFrame就是RDD+Schema，可以认为是一张二维表格，劣势在于编译器不进行表格中的字段的类型检查，在运行期进行检查
+  4、DataSet是Spark最新的数据抽象，Spark的发展会逐步将DataSet作为主要的数据抽象，
+  弱化RDD和DataFrame.DataSet包含了DataFrame所有的优化机制。除此之外提供了以样例类为 Schema模型的【强类型】
+  5、DataFrame=DataSet[Row]
+  6、DataFrame和DataSet都有可控的内存管理机制，所有数据都保存在非堆上，都使用了catalyst进行SQL的优化。
+
+3、Spark SQL客户端查询：
+  1、可以通过Spark-shell来操作Spark SQL，spark作为SparkSession的变量名，sc作为SparkContext的变量名
+  2、可以通过Spark提供的方法读取json文件，将json文件转换成DataFrame
+  3、可以通过DataFrame提供的API来操作DataFrame里面的数据。
+  4、可以通过将DataFrame注册成为一个临时表的方式，来通过Spark.sql方法运行标准的SQL语句来查询
+
+二、Spark SQL查询方式
+1、DataFrame查询方式
+    1、DataFrame支持两种查询方式：一种是DSL风格，另外一种是SQL风格
+    (1)、DSL风格：
+    需要引入import spark.implicit._这个隐式转换，可以将DataFrame隐式转换成RDD
+    (2)、SQL风格：
+    a、需要将DataFrame注册成一张表格，如果通过CreateTempView这种方式来创建，那么该表格Session有效，如果通过CreateGlobalTempView来创建，那么该表格跨Session有效，但是SQL语句访问该表格的时候需要加上前缀global_temp
+    b、需要通过sparkSession.sql方法来运行你的SQL语句
+
+2、DataSet查询方式
+    定义一个DataSet，先定义一个Case类
+
+三、DataFrame、Dataset和RDD互操作
+1、RDD->DataFrame:
+    1、普通方式：
+        例如rdd.map(para(para(0).trim(),para(1).trim().toInt)).toDF("name","age")
+
+    2、通过反射来设置schema，例如：
+
+        #通过反射设置schema，数据集是spark自带的people.txt,路径在下面的代码中
+        case class Person(name:String,age:Int)
+        val peopleDF=spark.sparkContext.textFile("file:///root/spark/spark2.4.1/examples/src/main/resources/people.txt")
+            .map(_.split(",")).map(para=>Person(para(0).trim,para(1).trim.toInt)).toDF
+        peopleDF.show
+
+        #注册成一张临时表
+        peopleDF.createOrReplaceTempView("persons")
+        val teen=spark.sql("select name,age from persons where age between 13 and 29")
+        teen.show
+
+        这时teen是一张表，每一行是一个row对象，如果需要访问Row对象中的每一个元素，可以通过下标 row(0)；
+        teen.map(row=>"name:"+row(0).show)
+        你也可以通过列名 row.getAs[String]（"name"）
+        teen.map(row=>"name:"+row.getAs[String]("name")).show
+
+    3、通过编程的方式来设置schema，适用于编译器不能确定列的情况
+        val peopleRDD=spark.sparkContext.textFile("file:///root/spark/spark2.4.1/examples/src/main/resources/people.txt")
+        val schemaString="name age"
+        val filed=schemaString.split(" ").map(filename=> org.apache.spark.sql.types.StructField(filename,org.apache.spark.sql.types.StringType,nullable = true))
+        val schema=org.apache.spark.sql.types.StructType(filed)
+        peopleRDD.map(_.split(",")).map(para=>org.apache.spark.sql.Row(para(0).trim,para(1).trim))
+        val peopleDF=spark.createDataFrame(res6,schema)
+        peopleDF.show
+
+2、DataFrame->RDD：
+    dataFrame.rdd
+3、RDD->DataSet：
+    rdd.map(para=> Person(para(0).trim(),para(1).trim().toInt)).toDS
+4、DataSet->RDD：
+    dataSet.rdd
+5、DataFrame -> DataSet：
+    dataFrame.to[Person]
+6、DataSet -> DataFrame：
+    dataSet.toDF
+
+四、用户自定义函数（参见原文）
+
+五、Spark SQL和Hive的继承
+1、内置Hive
+    1、Spark内置有Hive，Spark2.1.1 内置的Hive是1.2.1。
+    2、需要将core-site.xml和hdfs-site.xml 拷贝到spark的conf目录下。如果Spark路径下发现metastore_db，需要删除【仅第一次启动的时候】。
+    3、在你第一次启动创建metastore的时候，你需要指定spark.sql.warehouse.dir这个参数，
+    比如：bin/spark-shell --conf spark.sql.warehouse.dir=hdfs://master01:9000/spark_warehouse
+    4、注意，如果你在load数据的时候，需要将数据放到HDFS上。
+
+2、外部Hive(这里主要使用这个方法)
+    1、需要将hive-site.xml 拷贝到spark的conf目录下。
+    2、如果hive的metestore使用的是mysql数据库，那么需要将mysql的jdbc驱动包放到spark的jars目录下。
+    3、可以通过spark-sql或者spark-shell来进行sql的查询。完成和hive的连接。
+
+六、Spark SQL的数据源
+1、输入
+    对于Spark SQL的输入需要使用sparkSession.read方法
+
+    1、通用模式   sparkSession.read.format("json").load("path")   支持类型：parquet、json、text、csv、orc、jdbc
+    2、专业模式   sparkSession.read.json("path")、 csv("path")  直接指定类型。
+
+2、输出
+    对于Spark SQL的输出需要使用  sparkSession.write方法
+
+    1、通用模式   dataFrame.write.format("json").save("path")  支持类型：parquet、json、text、csv、orc
+
+    2、专业模式   dataFrame.write.csv("path")  直接指定类型
+
+    3、如果你使用通用模式，spark默认parquet是默认格式、sparkSession.read.load 加载的默认是
+        parquet格式dataFrame.write.save也是默认保存成parquet格式。
+
+    4、如果需要保存成一个text文件，那么需要dataFrame里面只有一列（只需要一列即可）。
+
+七、Spark SQL实战
+    1、获取三个表中数据转化为DataSet;例如：（这里只提供了一张表）
+        case class tbStock(ordernumber:String,locationid:String,dateid:String) extends Serializable
+        val tbStockRdd=spark.sparkContext.textFile("file:///root/dataset/tbStock.txt")
+        val tbStockDS=tbStockRdd.map(_.split(",")).map(attr=>tbStock(attr(0),attr(1),attr(2))).toDS
+        tbStockDS.show()
+    其他表类似：
+    2、注册表（三张）
+        tbStockDS.createOrReplaceTempView("tbStock")
+        tbDateDS.createOrReplaceTempView("tbDate")
+        tbStockDetailDS.createOrReplaceTempView("tbStockDetail")
+
+    3、拼写sql，进行查询
+        1、计算所有订单中每年的销售单数、销售总额
+        select c.theyear,count(distinct a.ordernumber),sum(b.amount)
+        from tbStock a
+        join tbStockDetail b on a.ordernumber=b.ordernumber
+        join tbDate c on a.dateid=c.dateid
+        group by c.theyear
+        order by c.theyear
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

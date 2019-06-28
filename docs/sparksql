@@ -3,6 +3,9 @@
         这种转换，就可以修复程序中的类型错误。
         参考文档：https://www.jianshu.com/p/84f3e9fb5631
     2、createOrReplaceTempView
+        可以将数据对象存成临时视图，便于后续的各种查询操作等。
+        在spark2中：使用createTempView和createOrReplaceTempView取代registerTempTable。
+
         createOrReplaceTempView：创建临时视图，此视图的生命周期与用于创建此数据集的[SparkSession]相关联。
         createGlobalTempView：创建全局临时视图，此时图的生命周期与Spark Application绑定。
             df.createOrReplaceTempView("tempViewName")
@@ -16,9 +19,28 @@
             self.ss = SparkSession(sc)
             ...
             self.ss.stop()
+    3、registerTempTable
+        spark2.0 被替换为临时视图。
+        可以将数据对象存成临时表，便于后续的各种查询操作等。
+        其生命周期只在所定义的sqlContext或hiveContext实例之中。
+        换而言之，在一个sqlontext（或hiveContext）中registerTempTable的表不能在另一个sqlContext（或hiveContext）中使用。
+        我的总结：在一个sqlontext中注册的临时表不能在另一个表中使用。
 
+10、有这两种方法是可以重设RDD分区：分别是coalesce()方法和repartition()。
+    https://blog.csdn.net/zhao897426182/article/details/78684121
 
+执行SparkSQL语句顺序为：
+ 　　1.对读入的SQL语句进行解析（Parse），分辨出SQL语句中哪些词是关键词（如SELECT、FROM、WHERE），
+ 哪些是表达式、哪些是Projection、哪些是Data Source等，从而判断SQL语句是否规范；
 
+ 　　2.将SQL语句和数据库的数据字典（列、表、视图等等）进行绑定（Bind），如果相关的Projection、
+    DataSource等都是存在的话，就表示这个SQL语句是可以执行的；
+
+ 　　3.一般的数据库会提供几个执行计划，这些计划一般都有运行统计数据，数据库会在这些计划中选择一个最优计划（Optimize）；
+
+ 　　4.计划执行（Execute），按Operation-->DataSource-->Result的次序来进行的，在执行过程有
+ 时候甚至不需要读取物理表就可以返回结果，比如重新运行刚运行过的SQL语句，可能直接从数据库的缓冲池
+ 中获取返回结果。
 
 
 一、认识SparkSQL

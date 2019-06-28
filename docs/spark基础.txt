@@ -19,3 +19,29 @@ Spark部署方式
 
     yarn cluster: 这个就是生产环境常用的模式，所有的资源调度和计算都在集群环境上运行。
     yarn client: 这个是说Spark Driver和ApplicationMaster进程均在本机运行，而计算任务在cluster上。
+3、DataSet\DataFrame\RDD的区别：
+  （1）相同点：
+            都是分布式数据集
+            DataFrame底层是RDD，但是DataSet不是，不过他们最后都是转换成RDD运行
+            DataSet和DataFrame的相同点都是有数据特征、数据类型的分布式数据集(schema)
+  （2）不同点：
+            （a）schema信息：
+                  RDD中的数据是没有数据类型的
+                  DataFrame中的数据是弱数据类型，不会做数据类型检查
+                      虽然有schema规定了数据类型，但是编译时是不会报错的，运行时才会报错
+                  DataSet中的数据类型是强数据类型
+            （b）序列化机制：
+                  RDD和DataFrame默认的序列化机制是java的序列化，可以修改为Kyro的机制
+                  DataSet使用自定义的数据编码器进行序列化和反序列化
+
+4、 DataSet\DataFrame\RDD的相互转化
+    1、要使用toDS之前
+      import sqlContext.implicits._
+    2、将内存中的数据转换成DataSet
+        sqlContext.implicits._
+        val ds = Seq(1, 2, 3).toDS()
+        ds.map(_ + 1).collect() // Returns: Array(2, 3, 4)
+
+        其中：
+        collect()：返回一个Array，包含所有行信息
+        Returns an array that contains all rows in this Dataset.

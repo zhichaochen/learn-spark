@@ -36,15 +36,15 @@ public class LearnSparkSql {
         //查看表结构
         dataset.printSchema();
         //查看某一列 类似于MySQL： select name from people
-        dataset.select("name").show();
+        dataset.select(("name")).show();
         //查看多列并作计算 类似于MySQL: select name ,age+1 from people
         dataset.select("name", ("age")+1).show();
         //设置过滤条件 类似于MySQL:select * from people where age>21
-        dataset.filter(("age")).show();
+        dataset.filter(dataset.col("age").gt(21)).show();
         //做聚合操作 类似于MySQL:select age,count(*) from people group by age
-        //dataset.groupBy("age").count().show();
+        dataset.groupBy("age").count().show();
         //上述多个条件进行组合 select ta.age,count(*) from (select name,age+1 as "age" from people) as ta where ta.age>21 group by ta.age
-        // dataset.select("name", Column("age").plus(1).alias("age")).filter(col("age").gt(21)).groupBy("age").count().show();
+        dataset.select(dataset.col("name"), dataset.col("age").plus(1).alias("age")).filter(dataset.col("age").gt(21)).groupBy("age").count().show();
 
         //方法一：
         Encoder<Person> personEncoder = Encoders.bean(Person.class);
