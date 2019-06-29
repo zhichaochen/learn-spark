@@ -83,11 +83,13 @@ Spark部署方式
     （5）、每个executor与在客户端Client上的Driver通信领取task（虚线部分）
 
 
-    Resource Manager：一个中心的管理服务，决定了哪些应用可以启动executor进程，以及何时何地启动
-
-    Node Manager：一个在每个节点运行的从服务，真正执行启动executor进程，同时监控进程是否存活以及资源消耗情况
-
-    Application Master：在 YARN 中，每个应用都有一个 Application master 进程，这是启动应用的第一个容器。这个进程负责向 ResourceManager 请求资源，当资源分配完成之后，向 NodeManager 发送启动容器的指令。
+    Resource Manager：
+        一个中心的管理服务，决定了哪些应用可以启动executor进程，以及何时何地启动
+    Node Manager：
+        个在每个节点运行的从服务，真正执行启动executor进程，同时监控进程是否存活以及资源消耗情况
+    Application Master：
+        在 YARN 中，每个应用都有一个 Application master 进程，这是启动应用的第一个容器。
+        这个进程负责向 ResourceManager 请求资源，当资源分配完成之后，向 NodeManager 发送启动容器的指令。
 
 
 

@@ -1,4 +1,6 @@
-参考地址：http://www.imooc.com/article/280006  上面作者的几篇关于spark的文章都值得看一下。
+参考地址：http://www.imooc.com/article/280006
+上面作者的几篇关于spark的文章都值得看一下。后面有一些java相关的，也是很值得看看
+
 spark任务提交：https://www.jianshu.com/p/90ba82d9838c
 
 

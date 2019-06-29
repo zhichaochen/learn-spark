@@ -1,0 +1,110 @@
+1.简介
+    Yarn是Hadoop推出整个分布式（大数据）集群的资源管理器，负责资源的管理和分配，
+    基于Yarn，我们可以在同一个大数据集群上同时运行多个计算框架。例如：Spark、MapReduce、Storm等
+
+2、YARN基本组成结构
+    YARN总体上仍然是Master/Slave结构，ResourceManager为Master，NodeManager为Slave，
+    ResourceManager负责对各个NodeManager上的资源进行统一管理和调度。
+    当用户提交一个应用程序时，需要提供一个用以跟踪和管理这个程序的ApplicationMaster，它负责向ResourceManager申请资源，
+    并要求NodeManger启动可以占用一定资源的任务。由于不同的ApplicationMaster被分布到不同的节点上，因此它们之间不会相互影响。
+
+2.1 、ResourceManager（RM）
+    RM是一个全局的资源管理器，负责整个系统的资源管理和分配。它主要由两个组件构成：
+    调度器（Scheduler）和应用程序管理器（Applications Manager，AM）。
+
+    （1）调度器
+    调度器根据容量、队列等限制条件（如每个队列分配一定的资源，最多执行一定数量的作业等），将系统中的资源分配给各个正在运行的应用程序。
+    需要注意的是，该调度器是一个“纯调度器”，它不再从事任何与具体应用程序相关的工作，比如不负责监控或者跟踪应用的执行状态等，
+    也不负责重新启动因应用执行失败或者硬件故障而产生的失败任务， 这些均交由应用程序相关的ApplicationMaster完成。
+
+    调度器仅根据各个应用程序的资源需求进行资源分配，而资源分配单位用一个抽象概念“资源容器”（Resource Container，简称Container）
+    表示，Container是一个动态资源分配单位，它将内存、CPU、磁盘、网络等资源封装在一起，从而限定每个任务使用的资源量。
+    此外，该调度器是一个可插拔的组件，用户可根据自己的需要设计新的调度器，YARN提供了多种直接可用的调度器，
+    比如Fair Scheduler和Capacity Scheduler等。
+
+    （2） 应用程序管理器
+     应用程序管理器负责管理整个系统中所有应用程序，包括应用程序提交、与调度器协商资源以启动ApplicationMaster、
+     监控ApplicationMaster运行状态并在失败时重新启动它等。
+
+2.2、 ApplicationMaster（AM）
+    用户提交的每个应用程序均包含1个AM，主要功能包括：
+        与RM调度器协商以获取资源（用Container表示）；
+        将得到的任务进一步分配给内部的任务；
+        与NM通信以启动/停止任务；
+        监控所有任务运行状态，并在任务运行失败时重新为任务申请资源以重启任务。
+
+   当前YARN自带了两个AM实现，一个是用于演示AM编写方法的实例程序distributedshell，它可以申请一定数目的Container
+   以并行运行一个Shell命令或者Shell脚本；另一个是运行MapReduce应用程序的AM—MRAppMaster，
+   此外，一些其他的计算框架对应的AM正在开发中，比如Open MPI、Spark等。
+
+2.3、 NodeManager（NM）
+    NM是每个节点上的资源和任务管理器，一方面，它会定时地向RM汇报本节点上的资源使用情况和各个Container的运行状态；
+    另一方面，它接收并处理来自AM的Container启动/停止等各种请求。
+
+2.4、 Container
+    Container是YARN中的资源抽象，它封装了某个节点上的多维度资源，如内存、CPU、磁盘、网络等，
+    当AM向RM申请资源时，RM为AM返回的资源便是用Container表示的。
+    YARN会为每个任务分配一个Container，且该任务只能使用该Container中描述的资源。
+
+
+3、Yarn基本工作流程：
+
+注意：Container要向NodeManager汇报资源信息，Container要向App Mstr汇报计算信息
+
+        2.1 客户端向ResourceManager提交Application，
+
+        2.2 ResourceManager 接受应用并根据集群资源状况决定在某个具体 Node 上来启动当前提交的应用程序的任务调度器 Driver（ApplicationMaster），
+
+        2.3 决定后，ResourceManager 会命令某个具体的 Node上的资源管理器 NodeManager 来启动一个新的JVM进程运行程序的 Driver 部分，
+
+        2.4 当ApplicationMaster 启动的时候（会首先向ResourceManager注册说明自己负责当前程序的运行）会下载 当前 Application相关的Jar等各种资源，并基于此决定向ResourceMananger申请资源的具体内容。
+
+        2.5 ResourceManager 接受到 ApplicationMaster 的资源分配的请求之后，会最大化地满足资源分配的请求，并把资源的元数据信息发送给ApplicationMaster，
+
+        2.6 ApplicationMaster 收到资源的元数据信息后会根据元数据发指令给具体机器上的 NodeManager，让 NodeManager 来启动具体的 Container，
+
+        2.7 Container 在启动后必须向 ApplicationMaster 注册，当 ApplicationMaster 获得了用于计算的 Containers 后，开始进行任务的调度和计算，直到作业完成。
+
+需要补充说明的是：
+
+        （1） 如果 ResourceManager 第一次没有能够完全完成 ApplicationMaster 分配的资源的请求，后续 ResourceManager 发现集群中有新的可用资源时，会主动向ApplicationMaster 发送新的可用资源的元数据信息以提供更多的资源用于当前程序的运行。
+
+        （2）如果是 hadoop 的 MapReduce 计算的话Container不可以复用，如果是 Spark On Yarn 的话，Container可以复用。
+
+        （3）Container 具体的销毁是由 ApplicationMaster 来决定的。
+
+        （4）ApplicationMaster 发指令给 NodeManager 让NM销毁Container.
+
+
+
+
+
+Spark 运行在 YARN 上时，不需要启动 Spark 集群，只需要启动 YARN即可！！ YARN的 ResourceManager 相当于 Spark Standalone 模式下的 Master
+
+Spark on YARN 有两种运行模式：
+
+1. Cluster -- Driver 运行在 YARN集群下的某台机器上的JVM进程中
+
+2. Client -- Driver 运行在当前提交程序的机器上
+
+Standalone 模式下启动Spark集群（Master 和 Worker），其实启动的是资源管理器。真正作业的计算和资源管理器没有关系。
+
+
+
+Spark on Yarn模式下Driver和ApplicationMaster的关系：
+
+Cluster： Driver位于ApplicationMaster进程中，我们需要通过Hadoop默认指定的8088端口来通过Web控制台查看当前Spark程序运行的信息。
+
+Client： Driver为提交代码的机器上，此时ApplicationMaster依旧位于集群中且只负责资源的申请和launchExecutor，此时启动后的Executor并不会向ApplicationMaster进程注册，而是向Driver注册
+
+
+
+另外几点说明：
+
+在Spark on Yarn的模式下，Hadoop Yarn的配置yarn.nodemanager.local-dirs会覆盖Spark的spark.local.dir !!!
+
+在实际生产环境下一般都采用Cluster，我们会通过HistoryServer来获取最终全部的运行信息。
+
+如果想直接看运行的日志信息，可以使用以下命令：
+
+yarn logs –applicationId  <app ID>
