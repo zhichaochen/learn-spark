@@ -92,7 +92,9 @@ Spark部署方式
         这个进程负责向 ResourceManager 请求资源，当资源分配完成之后，向 NodeManager 发送启动容器的指令。
 
 
-
+9、spark-submit
+    例如：
+    spark-submit --master spark://hadoop01:7077 --class org.apache.spark.examples.SparkPi /usr/local/spark-2.2.1-bin-hadoop2.7/examples/jars/spark-examples_2.11-2.2.1.jar 1000
 
 
 

@@ -169,8 +169,10 @@ bin/spark-submit [option] <app jar | python file> [app option]
 代码打包通常使用构建工具生成单个大JAR包，使用最广泛的构建工具是Maven（通常用于java）和sbt（通常用于scala）。
 工程的根目录中，需要创建一个叫做build.sbt的构建文件，源代码放在src/main/scala中。
 
-YARN是hadoop2.0中引入的集群管理器，他可以让多种数据处理框架运行在一个共享的资源池上，并且通常安装在与hadoop文件系统相同的物理节点上，在这样配置的YARN集群上运行spark是很有意义的，可以让spark在存储数据的物理节点上运行，快速访问hdfs数据。
-需要找到你的hadoop配置目录，并把它设置为环境变量HADOOP_CONF_DIR
+    YARN是hadoop2.0中引入的集群管理器，他可以让多种数据处理框架运行在一个共享的资源池上，
+    并且通常安装在与hadoop文件系统相同的物理节点上，在这样配置的YARN集群上运行spark是很有意义的，
+    可以让spark在存储数据的物理节点上运行，快速访问hdfs数据。
+    需要找到你的hadoop配置目录，并把它设置为环境变量HADOOP_CONF_DIR
 
 如果从0开始，可以选择独立集群管理器，安装简单。
 如果要使用sprk的同时使用其他应用，用yarn，对于大多数的hadoop发行版，yarn已经装好了

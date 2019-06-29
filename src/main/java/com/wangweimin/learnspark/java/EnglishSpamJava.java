@@ -84,5 +84,7 @@ public class EnglishSpamJava {
         predict.show();
         predict.createTempView("res");
         session.sql("select content,prediction from res").show();
+
+        //spark-submit --master spark://10.99.21.162:7077 --com.wangweimin.learnspark.java.EnglishSpamJava C:\git\learn-spark\target\bitask-dev.jar 1000
     }
 }

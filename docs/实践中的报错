@@ -1,0 +1,14 @@
+1、Exception in thread "main" java.lang.NoSuchMethodError: com.google.common.base.Stopwatch.elapsedMill
+    添加：
+    <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+        <version>14.0.1</version>
+    </dependency>
+    在spark-core_2.10<
+        <exclusions>
+            <exclusion>
+                 <groupId>com.google.guava</groupId>
+                 <artifactId>guava</artifactId>
+            </exclusion>
+            </exclusions>
