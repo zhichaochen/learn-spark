@@ -1,0 +1,108 @@
+下载spark2.0：http://www.aboutyun.com/forum.php?mod=viewthread&tid=26432&ordertype=1
+http://www.imooc.com/article/254085
+
+
+Spark部署方式
+1、Local模式
+    Local模式就是运行在一台计算机上的模式，通常就是用于在本机上练手和测试。它可以通过以下集中方式设置master。
+
+    local: 所有计算都运行在一个线程当中，没有任何并行计算，通常我们在本机执行一些测试代码，或者练手，就用这种模式。
+    local[K]: 指定使用几个线程来运行计算，比如local[4]就是运行4个worker线程。通常我们的cpu有几个core，就指定几个线程，最大化利用cpu的计算能力
+    local[*]: 这种模式直接帮你按照cpu最多cores来设置线程数了。
+
+2、cluster模式
+    分为以下三种模式，区别在于谁去管理资源调度。
+    1、standalone模式
+    这种模式下，Spark会自己负责资源的管理调度。它将cluster中的机器分为master机器和worker机器，master通常就一个，
+    可以简单的理解为那个后勤管家，worker就是负责干计算任务活的苦劳力。
+    2、mesos模式
+    3、yarn模式
+    由于很多时候我们需要和mapreduce使用同一个集群，所以都采用Yarn来管理资源调度，这也是生产环境大多采用yarn模式的原因。
+    yarn模式又分为yarn cluster模式和yarn client模式：
+
+    yarn cluster: 这个就是生产环境常用的模式，所有的资源调度和计算都在集群环境上运行。
+    yarn client: 这个是说Spark Driver和ApplicationMaster进程均在本机运行，而计算任务在cluster上。
+3、DataSet\DataFrame\RDD的区别：
+  （1）相同点：
+            都是分布式数据集
+            DataFrame底层是RDD，但是DataSet不是，不过他们最后都是转换成RDD运行
+            DataSet和DataFrame的相同点都是有数据特征、数据类型的分布式数据集(schema)
+  （2）不同点：
+            （a）schema信息：
+                  RDD中的数据是没有数据类型的
+                  DataFrame中的数据是弱数据类型，不会做数据类型检查
+                      虽然有schema规定了数据类型，但是编译时是不会报错的，运行时才会报错
+                  DataSet中的数据类型是强数据类型
+            （b）序列化机制：
+                  RDD和DataFrame默认的序列化机制是java的序列化，可以修改为Kyro的机制
+                  DataSet使用自定义的数据编码器进行序列化和反序列化
+
+4、 DataSet\DataFrame\RDD的相互转化
+    参见sparksql总结：
+
+5、spark 生态系统
+    1、spark数据一般放在分布式存储系统里，比如HDFS、Hbase
+    HDFS的基本原理是将文件切分成等大的数据块(block，默认128MB)，存储到多台机器上，这是一个容量巨大、具有高容错性的磁盘。
+    通常的架构是一个NameNode（存放元数据）多个DataNode，为了防止namenode宕机，有一个备用的NameNode：Standby NameNode。
+    2、spark的资管管理与调度使用YARN，spark可以运行在YARN之上，YARN可以对多种类型的应用程序进行统一管理和调度，
+    spark四个主要模块：spark SQL，Spark Streaming，Graphx Graph-parallel，MLlib。
+
+6、MapReduce框架局限性
+    1、仅支持Map和Reduce两种操作，而spark支持丰富的Transformation和Action的api
+    2、处理效率低效
+        当一个计算逻辑很复杂的时候，会转换成多个MapReduce作业，而每个MapReduce作业都反复对磁盘进行读写，磁盘IO是个非常耗时的操作：Map的中间结果写入磁盘，Reduce写HDFS，多个MR之间通过读取HDFS来交换数据（**为什么要用磁盘呢？**MapReduce提出来大约是04年的时候，那个时候内存还很贵，所以需要大量存储空间的一个较好的解放方案就是使用磁盘，但现在内存的价格和当年磁盘的价格差不多，而磁盘的价格已经和磁带的价格差不多了）
+        任务调度和启动开销大
+        无法充分利用内存
+        Map端和Reduce端均需要排序
+    3、不适合迭代计算(如机器学习、图计算等)，交互式处理(数据挖掘) 和流式处理(点击日志分析)
+    4、MapReduce编程不够灵活，是时候尝试scala函数式编程语言
+    而且大数据计算框架多样，各自为战：
+
+7、spark 程序架构
+    我们来分析下一个spark程序的架构，每一个程序的main函数运行起来都由两类组件构成：Driver和Executor，
+    main函数运行在Driver中，一个Driver可以转化为多个Task，每个Task都可被调度运行在指定的Executor中。
+
+8、yarn-client内部处理逻辑
+
+    yarn-client模式下，Driver是运行在Client上的，spark程序是在哪台机器上提交的，这个Driver就运行在哪台机器上，
+    也就是main函数运行在哪台机器上，
+
+    当提交你的程序到yarn上时，背后发生了什么？
+
+    假设现在有四个服务器组成的yarn集群，一个为Resource Manager，其余三个为Node Manager，
+    当Node Manager启动的时候会将Node Manager上的信息注册到Resource Manager中，
+
+    在本地部署好hadoop环境之后即可提交spark程序
+    （1）、Resource Manager会启动一个Node Manager
+    （2）、再由Node Manager来启动你的Application Master
+    （3）、Application Master需要的资源是由你运行的程序所指定的，Application Master启动后
+        会与Resource Manager通信，为executor申请资源
+    （4）、一个executor挂了，Application Master会重新向Resource Manager申请一个executor并启动在某个Node Manager上。
+        如果是Node Manager挂了，Application Master会向Resource Manager申请相同数量的executor并启动；
+        executor拥有资源后，Application Master会与Node Manager通信来启动executor
+    （5）、每个executor与在客户端Client上的Driver通信领取task（虚线部分）
+
+
+    Resource Manager：一个中心的管理服务，决定了哪些应用可以启动executor进程，以及何时何地启动
+
+    Node Manager：一个在每个节点运行的从服务，真正执行启动executor进程，同时监控进程是否存活以及资源消耗情况
+
+    Application Master：在 YARN 中，每个应用都有一个 Application master 进程，这是启动应用的第一个容器。这个进程负责向 ResourceManager 请求资源，当资源分配完成之后，向 NodeManager 发送启动容器的指令。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
