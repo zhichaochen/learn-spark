@@ -1,0 +1,219 @@
+参考地址：http://www.imooc.com/article/280006  上面作者的几篇关于spark的文章都值得看一下。
+spark任务提交：https://www.jianshu.com/p/90ba82d9838c
+
+
+
+下面文章参考：
+参考文章：http://www.imooc.com/article/254099
+http://www.imooc.com/article/281823
+
+基础总结：
+    spark-submit:启动Driver进程->向集群管理器申请资源->Driver将代码分为几个stage->Driver为每个stage创建一批task->分配执行
+    stage：是根据宽窄依赖来区分的。
+    job：是根据action操作来区分的。
+
+    一个stage有多个分区就有多少个task，一个stage的执行快慢取决于最慢的哪一个task，stage串行执行的。
+
+    2、stage是根据宽窄依赖来区分的？
+    窄依赖：前一个rdd【能计算出一个唯一的rdd】，比如map或者filter等；
+    宽依赖：多个rdd生成一个或者多个rdd的操作，比如groupbykey reducebykey等，这种宽依赖通常会进行shuffle
+        （我的理解：宽依赖是指：后一个rdd，需要依赖多个之前的rdd）
+    因此Spark会根据宽窄依赖区分stage，某个stage作为专门的计算，计算完成后，会【等待其他的executor】，然后再统一进行计算。
+
+
+=====================================================================================================
+二、Spark调优基础与经验
+    参考：http://www.imooc.com/article/280006
+
+1 在client使用spark-submit提交一个spark任务后
+    1、首先，每个任务会对应启动一个Driver进程
+    2、然后，Driver进程为spark任务申请资源：向集群管理器Resource Manager申请运行Spark作业需要使用的资源，
+    主要的资源是Executor进程，Executor进程数量以及所需的CPU core可以通过spark任务设置的资源参数来指定；
+    3、其次，Driver进程会将Spark任务代码分拆为多个stage：资源申请完毕后，开始调度与执行任务代码，第一步就是将job拆分多个stage；
+    4、然后，Driver进程为每个stage创建一批task；
+    5、最后，将这些task分配到各个Executor进程中执行。
+
+2、Driver进程在哪里启动的？
+    Driver进程的启动方式根据任务部署模式的不同而不同：
+
+    local(本地模式)：Driver进程直接运行在本地
+    yarn-client：Driver运行在本地
+    yarn-cluster：Driver运行在集群中（NodeManager）
+
+3、Executor的内存分布：
+    执行task所需内存，默认20%
+    shuffle所需内存，默认20%
+    RDD cache或persist持久化所需内存，默认60%
+
+
+4、job stage task三个的关系
+    job：一个 rdd 的 action 触发的动作，可以简单的理解为，当你需要执行一个 rdd 的 action 的时候，会生成一个job；
+    stage：一个 job 会被切分成 1 个或 1 个以上的 stage，然后各个 stage 会按照执行顺序依次执行。
+    task：stage 下的一个任务执行单元，一般来说，一个 rdd 有多少个 partition，就会有多少个 task，
+        因为每一个task 只是处理一个 partition 上的数据。
+
+5、【数据倾斜是如何造成的】：
+    1、在Spark中，同一个Stage的不同Partition可以并行处理，而具有依赖关系的不同Stage之间是串行处理的。
+    假设某个Spark Job分为Stage 0和Stage 1两个Stage，且Stage 1依赖于Stage 0，那Stage 0完全处理结束之前不会处理Stage 1。
+    那换句话说，一个Stage所耗费的时间，【主要由最慢的那个Task决定】。
+
+    2、由于同一个Stage内的所有Task执行相同的计算，在排除不同计算节点计算能力差异的前提下，不同Task之间耗时的差异
+    主要【由该Task所处理的数据量决定】。
+
+    3、Stage的数据来源主要分为如下两类
+    从数据源直接读取。如读取HDFS，Kafka
+    读取上一个Stage的Shuffle数据
+
+    也可以分析应用是否产生了大量的shuffle，是否可以通过数据的本地性或者减小数据的传输来减少shuffle的数据量。
+
+6、spark调优的基本概念
+
+    一段代码至少由一个job来执行（在Jobs页面可查看，如下图），每个job可能由一个或多个stage完成（在Stages页面可查看，或点击job里的Description链接查看），而每个state由多个task线程完成（在Executors页面查看，或点击Stages里的Description链接查看）。通过查看顺序也可以看到job-stage-task的层级关系。
+    1、 job
+        job指的是在提交的【spark任务中一个action】，可以在spark ui的Jobs中可以看到Active Jobs为你的action的名称。
+
+    2、 stage
+        一个job会被拆分为一个或多个stage来执行，每个stage执行一部分代码片段，各个stage会按照执行顺序来执行。
+
+        而job按照什么规则来划分stage呢？
+        spark【根据shuffle类算子】（如join）来进行stage的划分，
+        即在shuffle类算子之前的代码为一个stage，在该shuffle类算子之后的代码则会下一个stage，
+        那么每个stage的执行不需要对整个数据集进行shuffle即可完成。
+
+    3、 task
+        一个stage由一批task线程来执行，task是spark最小的计算单元。
+        每个task执行相同的逻辑计算，但使用不同分区的数据，一个分区一个task。
+
+    4 shuffle过程
+        一个shuffle过程是：一个stage执行完后，下一个stage开始执行的每个task会从上一个stage执行的task所在的节点，
+        通过IO获取task需要处理的所有key，然后每个task对相同的key进行算子操作。这个过程被称为shuffle过程。
+
+7、常见的参数调优经验
+    【合理使用集群资源】，是优化spark任务执行性能【最基本最直接的方式】。
+    资源申请少了：可能导致任务执行非常缓慢甚至出现OOM，无法充分利用集群资源；
+    资源申请多了：当前队列可能无法分配充分资源，同时也影响别的同学任务的执行。
+
+    如果你和别人共享一个队列的资源，可以根据集群 ui 的scheduler上目前资源使用情况
+    （比如最大/小的资源数，当前资源数，最大运行任务数，当前运行任务数等）来设置要申请多少资源，
+    申请多少资源可以通过各种常用资源参数来调节。
+
+    参见spark申请资源参数.jpg
+
+
+======================================================================================================
+http://www.imooc.com/article/281823
+三、数据倾斜调优
+
+1、what is a shuffle?
+    1、shuffle
+    一个stage执行完后，下一个stage开始执行的每个task会从【上一个stage执行的task所在的节点】，
+    通过网络传输获取task需要处理的所有key，然后每个task对相同的key进行算子操作，这个过程就是shuffle过程。
+
+    shuffle过程之所以慢是因为有大量的磁盘IO以及网络传输操作。
+    spark中负责shuffle的组件主要是ShuffleManager，在spark1.1之前采用的都是HashShuffleManager，在1.1之后开始引入效果更优SortShuffleManager，并在1.2开始默认使用SortShuffleManager。
+
+    2、HashShuffleManager
+    core：应该指cpu核心数，一般也是task数
+    优化前：
+        Executor中每个core对应的task在shuffle写的时候都会产生和下一个stage包含task数目一样的磁盘文
+        也就是说：下一个stage包含多少个task（即Reducer），当前stage的task就会产生多少个磁盘文件
+
+        shuffle read阶段每个task从上一个stage中的每一个task中通过网络传输拉取相同key的数据进行聚合等shuffle操作。
+        所以产生的磁盘文件越多，shuffle read的IO操作就越频繁，且大量的buffer将对Executor的存储空间产生巨大的压力。
+
+
+    优化后：的HashShuffleManager的shuffle的读写过程：
+        每个core都产生了和下一个stage的task相同数目的磁盘文件。
+        同一core中的不同task复用一批磁盘文件，减少磁盘文件数据，提升shuffle write性能。
+        (我的理解：各个stage在一个core上形成不同的task，但是各个task使用相同的磁盘文件。)
+
+    3、 sortShuffleManager
+    SortShuffleManager主要改进点是在内存溢写到磁盘文件之前，会根据Partition id以及key对内存数据进行sort排序，然后再分批写入磁盘文件，分批的batch数量大小为1w条，最后将产生的多个磁盘文件merge成一个磁盘文件，并产生一个索引文件，用以标识下游stage中的各个task的数据在文件中的start offset 和 end offset，直观来看，一个task仅产生一个磁盘文件和一个索引文件。产生的磁盘文件少了，但增加了排序的性能开销，如果这部分在你的业务场景下开销大，那么可以选择SortShuffleManager的bypass机制。
+
+    在ShuffleManager一路优化的过程中，一个重要优化思想其实就是在减少shuffle过程中产生磁盘文件数量，一个直观的逻辑：磁盘文件少，上下游stage需要进行的磁盘IO操作就相对少了。而磁盘文件过多会带来以下问题：
+
+    如果磁盘文件多，进行shuffle操作时需要同时打开的文件数多，大量的文件句柄和写操作分配的临时内存将对内存和GC带来压力，特别是在YARN的模式下，往往Executor分配的内存不足以支持这么大的内存压力；
+    如果磁盘文件多，那么其所带来的随机读写需要多次磁盘寻道和旋转延迟，比顺序读写的时间多许多倍。
+    可以通过Spark.shuffle.manager参数来设置使用哪种shuffle manager。
+
+    以上我们介绍了what is a shuffle，shuffle write 与 shuffle read的过程，以及为什么shuffle对spark任务性能消耗大，在整体上了解shuffle之后，我们来了解下如何handle shuffle。
+
+2、判断&定位
+    查看spark web ui 上 task的【执行时间或分配的数据量】，
+    如果一般task执行时间只有几秒，而某些task执行时间是几分钟甚至更久，那这部分task对于的stage就出现了数据倾斜
+    根据stage的划分方式即可定位哪段代码中的算子导致了数据倾斜。
+
+    常见的触发shuffle操作的算子：distinct、groupByKey、reduceByKey、aggregateByKey、join、cogroup、repartition等
+
+3、深究key分布
+    如果是数据倾斜的数据来源于hive表，那么我们可以分析下spark sql中key的数据分布情况
+    如果数据来源于中间的RDD，那么可以使用RDD.countByKey()来统计不同key出现的次数
+    如果数据量大，可以使用采样来分析，比如：
+
+    val sampledRDD = shuffleRDD.sample(false, 0.1)
+    val sampledKeyCounts = sampledRDD.countByKey()
+    sampledKeyCounts.foreach(println(_))
+
+4、How to fix it?
+     1、数据来源于hive表，将导致数据倾斜的shuffle算子前置到**hive ETL（提取、转换和加载）**中，之后的spark任务可反复
+     基于hive ETL后的中间表，保证了spark任务的性能。适用于多次数据计算，且对spark性能要求高的场景。
+
+     2、不是所有的数据都有用，
+        1、如果filter少数几个数据量大的key不影响数据结果，那在数据预处理的时候【可以进行过滤】，
+        2、可以在数据计算前对RDD进行sample采样，过滤数据量大的key，这样不仅可以避免数据倾斜，
+     也可以避免相同的代码在某天突然OOM的情况，有可能这一天有某个平时表现正常的key暴增导致OOM。
+
+     3、shuffle算子并行操作，我们知道在shuffle过程中，分布在不同task的相同key的数据会通过网络传输到同一个task进行
+     shuffle计算，这时候一个task可能会处理多种key的数据，比如k1,k2,k3可能都被拉取到某一个task上进行reduce操作，
+     如果k1,k2,k3的数量比较大，我们可以通过提高reduce的并行度来使得k1,k2,k3的数据分别拉取到t1,t2,t3
+     三个task上计算，怎么做呢？如果是RDD的shuffle操作，给shuffle算子传入一个参数即可，比如reduceByKey(600)，
+     如果是Spark SQL的shuffle操作，配置一个shuffle参数：spark.sql.shuffle.partitions，
+     该参数表示shuffle read task的并行度，默认200，可根据业务场景进行修改。
+
+     4、key 散列设计再聚合，spark的shuffle操作导致的数据倾斜问题在一定意义上可以类比HBase的热点问题，因此HBase的rowkey的散列设计思想可以套用在聚合类的shuffle操作导致的数据倾斜的场景，怎么做呢？先对key进行hash散列，可以使用随机数，也可以针对key的具体内容进行hash，目的是将原本数据量大的key先hash成k个的key，那么原本必须拉取到一个task上进行shuffle计算的数据可以拉取到k个不同的task上计算，在一定程度上可以缓解单个task处理过多数据导致的数据倾斜，然后再对局部聚合后的key去除hash再聚合。这种key散列设计思想在解决join的shuffle操作广泛使用。
+     5、”map join" replace “reduce join”，如果join操作是大小表的join，可以考虑将小表广播，首先collect到driver的内存中，为其创建一个broadcase变量，这时候Driver和每个Executor都会保存一份小表的全量数据，再在map操作中自定义join的逻辑，在这个join逻辑里，使用已在内存中的全量的小表数据与大表的每一条数据进行key对比&连接，用map join来代替普通的reduce join，可以避免数据倾斜。由于需要在内存中存放全量小表，所以小表数据量在一两G是可取的。
+
+
+==================================================================================================================
+http://www.imooc.com/article/254099
+
+一、spark调优基础-spark ui初探。
+ui界面：http://localhost:4040/ 启动一个Application就会生成一个对应的UI界面
+hostname是提交任务的Spark客户端ip地址
+端口号由参数spark.ui.port(默认值4040，如果被占用则顺序往后探查)来确定。
+
+1、 job页面
+这里包含了两部分：Event Timeline，事件发生的时间线信息；当前应用分析出来的所有任务，包括所有的excutors中action的执行时间等。这里会显示所有Active，Completed, Cancled以及Failed状态的Job。
+1.1 Event Timeline
+可以看到executor创建的时间点，以及某个action触发的算子任务，执行的时间，如下图所示：
+图片描述
+从上图可以看到，这里开了10个executor，可以通过“–num-executors 10”来设置。我们通过count() 的action来触发了一个job，可以在上图的右下角看到。通过这个时间图，可以快速的发现应用的执行瓶颈，触发了多少个action。
+
+
+在Spark中job是根据action操作来区分的。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
