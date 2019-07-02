@@ -79,7 +79,7 @@ Windows 平台安装spark开发环境--IDEA
             <!-- 这个参数设置为1，因为是单机版hadoop -->
             <property>
                 <name>dfs.replication</name>
-                <value>1</value>
+                <value>2</value>
             </property>
             <property>
                 <name>dfs.data.dir</name>

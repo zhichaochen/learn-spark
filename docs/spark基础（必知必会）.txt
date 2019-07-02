@@ -95,9 +95,75 @@ Spark部署方式
 9、spark-submit
     例如：
     spark-submit --master spark://hadoop01:7077 --class org.apache.spark.examples.SparkPi /usr/local/spark-2.2.1-bin-hadoop2.7/examples/jars/spark-examples_2.11-2.2.1.jar 1000
+    spark提交任务常见的两种模式:
+    1,local[k]:本地使用k个worker线程运行saprk程序.这种模式适合小批量数据在本地调试代码用.(若使用本地的文件,需要在前面加上:file://)
+    2,spark on yarn模式:
+        (1)yarn-client模式: 以client模式连接到yarn集群,该方式driver是在client上运行的;
+        (2)yarn-cluster模式:以cluster模式连接到yarn集群,该方式driver运行在worker节点上.
+        (3)对于应用场景来说,Yarn-Cluster适合生产环境，Yarn-Client适合交互和调试。
+    ,提交任务时的几个重要参数:
 
+    executor-cores：             每个executor使用的内核数,默认为1
+    num-executors：              启动executor的数量,默认为2
+    executor-memory：	         executor的内存大小,默认为1G
+    driver-cores：	             driver使用的内核数,默认为1
+    driver-memory：	             driver的内存大小,默认为1G
+    queue：	                     指定了放在哪个队列里执行
+    spark.default.parallelism：	 该参数用于设置每个stage的默认task数量。这个参数极为重要，
+         如果不设置可能会直接影响你的Spark作业性能，Spark官网建议的设置原则是，
+         设置该参数为num-executors * executor-cores的2~3倍较为合适
 
+    spark.storage.memoryFraction：   	该参数用于设置RDD持久化数据在Executor内存中能占的比例，默认是0.6。也就是说，
+        默认Executor 60%的内存，可以用来保存持久化的RDD数据。根据你选择的不同的持久化策略，
+        如果内存不够时，可能数据就不会持久化，或者数据会写入磁盘。
+    spark.shuffle.memoryFraction：	    该参数用于设置shuffle过程中一个task拉取到上个stage的task的输出后，
+        进行聚合操作时能够使用的Executor内存的比例，默认是0.2。也就是说，
+        Executor默认只有20%的内存用来进行该操作。shuffle操作在进行聚合时，
+        如果发现使用的内存超出了这个20%的限制，那么多余的数据就会溢写到磁盘文件中去，此时就会极大地降低性能
+    total-executor-cores：	            所有executor的总核数
 
+    4.几个重要的参数说明:
+    (1)executor_cores*num_executors 
+         表示的是能够并行执行Task的数目不宜太小或太大！一般不超过总队列 cores 的 25%，比如队列总 cores    400，最大不要超过100，最小不建议低于40，除非日志量很小。
+    (2)executor_cores 
+         不宜为1！否则 work 进程中线程数过少，一般 2~4 为宜。
+    (3)executor_memory 
+         一般 6~10g 为宜，最大不超过20G，否则会导致GC代价过高，或资源浪费严重。
+    (4)driver-memory 
+         driver 不做任何计算和存储，只是下发任务与yarn资源管理器和task交互，除非你是 spark-shell，否则一般 1-2g
+         增加每个executor的内存量，增加了内存量以后，对性能的提升，有三点：
+    (5)如果需要对RDD进行cache，那么更多的内存，就可以缓存更多的数据，将更少的数据写入磁盘， 
+         甚至不写入磁盘。减少了磁盘IO。
+    (6)对于shuffle操作，reduce端，会需要内存来存放拉取的数据并进行聚合。如果内存不够，也会写入磁盘。
+         如果给executor分配更多内存以后，就有更少的数据，需要写入磁盘，甚至不需要写入磁盘。减少了磁盘IO，提升了性能。
+    (7)对于task的执行,可能会创建很多对象.如果内存比较小,可能会频繁导致JVM堆内存满了,然后频繁GC,垃圾回收 ,minor GC和full GC.（速度很慢）.内存加大以后，带来更少的GC，垃圾回收，避免了速度变慢，性能提升。
+
+    常见的语法：
+    ./bin/spark-submit \
+      --class <main-class>
+      --master <master-url> \
+      --deploy-mode <deploy-mode> \
+      --conf <key>=<value> \
+      ... # other options
+      <application-jar> \
+      [application-arguments]
+
+    ./spark-submit \
+    --class com.wangweimin.learnspark.SparkWordCount \
+    --master spark://hadoop036166:7077 \
+    --num-executors 3 \
+    --driver-memory 6g --executor-memory 2g \
+    --executor-cores 2 \
+    C:\git\learn-spark\target\bitask-dev.jar \
+    hdfs://hadoop036166:9000/user/fams/*.txt
+
+    ./bin/spark-submit \
+    --class com.wangweimin.learnspark.SparkWordCount \
+    --master yarn-cluster \  # can also be `yarn-client` for client mode
+    --executor-memory 10G \
+    --num-executors 50 \
+    C:\git\learn-spark\target\bitask-dev.jar \
+    1000
 
 
 

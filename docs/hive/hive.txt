@@ -1,16 +1,13 @@
 参考：https://www.cnblogs.com/edisonchou/p/4426096.html
 一、Hive：一个牛逼的数据仓库
 1.1 神马是Hive？
-　　 Hive 是建立在 Hadoop 基础上的数据仓库基础构架。
-    它提供了一系列的工具，可以用来进行数据提取转化加载（ETL），
-    这是一种可以存储、查询和分析存储在 Hadoop 中的大规模数据的机制。
-    Hive 定义了简单的类 SQL  查询语言，称为 QL ，它允许熟悉 SQL  的用户查询数据。
-    同时，这个语言也允许熟悉 MapReduce 开发者的开发自定义的 mapper  和 reducer 来处理内建的
-    mapper 和 reducer  无法完成的复杂的分析工作。
-
+　　 Hive 是建立在 Hadoop 基础上的数据仓库基础构架，它提供了一系列的工具，可以用来进行数据提取转化加载（ETL），
     Hive 是 SQL解析引擎，它将SQL语句转译成Map/Reduce Job然后在Hadoop执行。
-    Hive的表其实就是HDFS的目录，按表名把文件夹分开。如果是分区表，则分区值是子文件夹，可以直接在Map/Reduce Job里使用这些数据。
+    实质就是一款基于 HDFS 的 MapReduce 计算框架，对存储在 HDFS 中的数据进行分析和管理
 
+    【Hive的表其实就是HDFS的目录】，按表名把文件夹分开。如果是分区表，则分区值是子文件夹，可以直接在Map/Reduce Job里使用这些数据。
+
+    发出sql-> Hive处理，转换成MapReduce -> map reduce 计算（基于hdfs的数据。）
 1.2 Hive的系统结构
     HDFS和Mapreduce是Hive架构的根基。Hive架构包括如下组件：CLI（command line interface）、JDBC/ODBC、
     Thrift Server、WEB GUI、metastore和Driver(Complier、Optimizer和Executor).
@@ -19,30 +16,28 @@
     Hive 的数据存储在 HDFS 中，大部分的查询由 MapReduce 完成
     （包含 * 的查询，比如 select * from table 不会生成 MapRedcue 任务）
 
+1.3 为啥使用hive
+    1、更友好的接口：操作接口采用类 SQL 的语法，提供快速开发的能力
+　　 2、更低的学习成本：避免了写 MapReduce，减少开发人员的学习成本
+　　 3、更好的扩展性：可自由扩展集群规模而无需重启服务，还支持用户自定义函数
+
 二、Hive的基本安装
     1）下载hive安装包
     2、开始安装
-      　　（1）解压： tar -zvxf hive-0.9.0.tar.gz ，重命名：mv hive-0.9.0 hive
+        （1）解压： tar -zvxf hive-0.9.0.tar.gz ，重命名：mv hive-0.9.0 hive
+      　（2）加入环境变量配置文件中：vim /etc/profile
 
-      　　（2）加入环境变量配置文件中：vim /etc/profile
-
-      export HIVE_HOME=/usr/local/hive
-
-      export PATH=.:$HADOOP_HOME/bin:$HIVE_HOME/bin:$PIG_HOME/bin:$HBASE_HOME/bin:$ZOOKEEPER_HOME/bin:$JAVA_HOME/bin:$PATH　
-
-    最后当然别忘了使环境变量生效：source /etc/profile
+        export HIVE_HOME=/usr/local/hive
+        export PATH=.:$HADOOP_HOME/bin:$HIVE_HOME/bin:$PIG_HOME/bin:$HBASE_HOME/bin:$ZOOKEEPER_HOME/bin:$JAVA_HOME/bin:$PATH　
+        最后当然别忘了使环境变量生效：source /etc/profile
 
     3、配置Hive
     4、安装MySQL
     5、使用 MySQL 作为 Hive 的 metastore：
         Step 2.5.1:
-
         把mysql的jdbc驱动放置到hive的lib目录下：cp mysql-connector-java-5.1.10.jar /usr/local/hive/lib
-
         Step 2.5.2:
-
         修改hive-site.xml文件，修改内容如下：
-
         <property>
         　　<name>javax.jdo.option.ConnectionURL</name>
         　　<value>jdbc:mysql://hadoop-master:3306/hive?createDatabaseIfNotExist=true</value>

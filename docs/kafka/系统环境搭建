@@ -1,0 +1,7 @@
+https://www.cnblogs.com/guanzhyan/p/8974143.html
+参考地址：https://blog.csdn.net/woheniccc/article/details/79926778
+
+1、下载
+    http://mirror.bit.edu.cn/apache/kafka/2.3.0/kafka_2.11-2.3.0.tgz
+    1.将解压后的zookeeper文件夹,复制三份,分别命名为server1,server2,server3;
+    2. 在当前目录下建立两个文件夹data和dataLog,整体结构如下:

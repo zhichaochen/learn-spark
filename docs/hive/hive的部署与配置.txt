@@ -1,0 +1,69 @@
+参考文章：https://blog.csdn.net/tornadojava/article/details/56835459
+其中hbase hadoop hive java操作hbase都有。
+
+hive下载地址：http://mirror.bit.edu.cn/apache/hive/hive-2.3.5/
+环境
+java：jdk1.8
+Hadoop: hadoop-2.7.6
+Hive: Hive-2.3.5
+
+注意：bin.tar.gz 代表的是编译后的二进制文件。 src.tar.gz:表示源码文件。
+===================================================================
+1、元数据（metastore）
+
+HIVE的功能是将HQL翻译成MapReduce在Hadoop上执行。
+元数据的功能【就是将HQL翻译成MapReduce所需要的数据】。
+元数据默认存储在Derby中，建议都用关系型数据库。我的例子是使用了MySql。
+
+
+
+=========================================================================
+1、准备
+    1、下载hive部署包，并解压。
+    2、配置hive环境变量，HIVE_HOME，指向hive的目录，并将%HIVE_HOME%\bin添加至环境变量Path。
+2、配置文件的修改
+    C:\bigdata\apache-hive-2.3.5-src\conf 下的 hive-site.xml配置
+    修改value 改成自己的 value。
+        <property>
+            <name>javax.jdo.option.ConnectionURL</name>
+            <value>jdbc:mysql://localhost:3306/hive?createDatabaseIfNotExist=true</value>
+            <description>JDBC connect string for a JDBC metastore</description>
+        </property>
+
+        <property>
+          <name>javax.jdo.option.ConnectionDriverName</name>
+          <value>com.mysql.jdbc.Driver</value>
+          <description>Driver class name for a JDBC metastore</description>
+        </property>
+
+        <property>
+          <name>javax.jdo.option.ConnectionUserName</name>
+          <value>root</value>
+          <description>username to use against metastore database</description>
+        </property>
+
+        <property>
+          <name>javax.jdo.option.ConnectionPassword</name>
+          <value>123456</value>
+          <description>password to use against metastore database</description>
+        </property>
+3、导数据
+    创建hive 数据库
+    在C:\bigdata\apache-hive-2.3.5-src\metastore\scripts\upgrade\mysql
+    将 hive-txn-schema-2.3.0.mysql.sql  在数据库工具上执行。
+
+3、在hdfs上创建目录
+    启动hadoop 启动hive。
+    >hdfs dfs -mkdir /user
+    >hdfs dfs -mkdir /user/hive
+    >hdfs dfs -mkdir /user/hive/warehouse
+
+    和hadoop fs -mkdir hdfs://localhost:9000/user/ Y一样。
+
+    查看文件系统目录：
+    去localhost:50070查看文件系统的目录，点击utilities -> browse the file system。
+
+5、hive启动
+6、测试
+    hive>create table test_table(id INT, name string);
+    hive>show tables;

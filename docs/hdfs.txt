@@ -1,0 +1,199 @@
+参考：https://www.cnblogs.com/duanxz/p/3874009.html
+参考：https://blog.csdn.net/wypersist/article/details/79757242
+1、分区容错性：单台服务器，或多台服务器出问题（主要是网络问题）后，正常服务的服务器依然能正常提供服务，并且满足设计好的一致性和可用性。
+重点在于：部分服务器因网络问题，业务依然能够继续运行。
+分区：是指在分布式系统中，不同的节点分布在不同的子网络（机房，或者异地网络等。）
+
+总结：
+1、所有元信息，都保存在NameNode中。
+2、DataNode会通过心跳的方式定期的向NameNode发送自己节点上的Block，心跳信息中包含了所【存储文件块列表信息】
+
+一、hdfs体系结构
+1、Namenode是整个文件系统的管理节点。它维护着整个文件系统的文件目录树，文件/目录的元信息和每个文件对应的数据块列表, 接收用户的操作请求。
+    文件包括：
+    ①fsimage:元数据镜像文件。存储某一时段NameNode内存元数据信息。
+    ②edits:操作日志文件。
+    ③fstime:保存最近一次checkpoint的时间
+    以上这些文件是保存在linux的文件系统中。通过hdfs-site.xml的dfs.namenode.name.dir属性进行设置。
+    1、查看NameNode的fsimage与edits内容
+    2、元信息的持久化
+        在NameNode中存放元信息的文件是 fsimage。在系统运行期间所有对元信息的操作都保存在内存中并被持久化到另一个文件edits中。
+        并且edits文件和fsimage文件会被SecondaryNameNode周期性的合并（合并过程会在SecondaryNameNode中详细介绍）。
+    3、NameNode特点
+        运行NameNode会占用大量内存和I/O资源，一般NameNode不会存储用户数据或执行MapReduce任务。
+        为了简化系统的设计，Hadoop只有一个NameNode，这也就导致了hadoop集群的单点故障问题。
+        因此，对NameNode节点的容错尤其重要，hadoop提供了如下两种机制来解决：
+
+        1、将hadoop元数据写入到本地文件系统的同时再实时同步到一个远程挂载的网络文件系统（NFS）。
+        2、运行一个运行NameNode会占用大量内存和I/O资源，一般NameNode不会存储用户数据或执行MapReduce任务。
+
+              为了简化系统的设计，Hadoop只有一个NameNode，这也就导致了hadoop集群的单点故障问题。因此，对NameNode节点的容错尤其重要，hadoop提供了如下两种机制来解决：
+
+              将hadoop元数据写入到本地文件系统的同时再实时同步到一个远程挂载的网络文件系统（NFS）。
+              运行一个secondary NameNode，它的作用是与NameNode进行交互，定期通过编辑日志文件合并命名空间镜像，
+              当NameNode发生故障时它会通过自己合并的命名空间镜像副本来恢复。需要注意的是secondaryNameNode
+              保存的状态总是滞后于NameNode，所以这种方式难免会导致丢失部分数据（后面会详细介绍）。
+              NameNode，它的作用是与NameNode进行交互，定期通过编辑日志文件合并命名空间镜像，当NameNode发生故障时
+              它会通过自己合并的命名空间镜像副本来恢复。需要注意的是secondaryNameNode保存的状态总是滞后于NameNode，
+              所以这种方式难免会导致丢失部分数据（后面会详细介绍）。
+
+    4、SecondaryNameNode
+        需要注意，SecondaryNameNode并不是NameNode的备份。
+        在NameNode启动时，它首先会加载fsimage到内存中，在系统运行期间，所有对NameNode的操作也都保存在了内存中，
+        同时为了防止数据丢失，这些操作又会不断被持久化到本地edits文件中。
+
+        edits文件存在的目的是为了提高系统的操作效率，NameNode在更新内存中的元信息之前都会先将操作写入edits文件。
+        在NameNode重启的过程中，edits会和fsimage合并到一起，但是合并的过程会影响到Hadoop重启的速度，
+        SecondaryNameNode就是为了解决这个问题而诞生的。
+
+        SecondaryNameNode的角色就是定期的合并edits和fsimage文件，我们来看一下合并的步骤：
+
+        合并之前告知NameNode把所有的操作写到新的edites文件并将其命名为edits.new。
+        SecondaryNameNode从NameNode请求fsimage和edits文件
+        SecondaryNameNode把fsimage和edits文件合并成新的fsimage文件
+        NameNode从SecondaryNameNode获取合并好的新的fsimage并将旧的替换掉，并把edits用第一步创建的edits.new文件替换掉
+        更新fstime文件中的检查点
+        最后再总结一下整个过程中涉及到NameNode中的相关文件
+            fsimage ：保存的是上个检查点的HDFS的元信息
+            edits ：保存的是从上个检查点开始发生的HDFS元信息状态改变信息
+            fstime：保存了最后一个检查点的时间戳
+
+2、Datanode
+    提供真实文件数据的存储服务。 DataNode是hdfs中的worker节点，它负责存储数据块，也负责为系统客户端提供数据块的读写服务，
+    同时还会根据NameNode的指示来进行创建、删除、和复制等操作。此外，它还会通过心跳定期向NameNode发送所存储文件块列表信息。
+    当对hdfs文件系统进行读写时，NameNode告知客户端每个数据驻留在哪个DataNode，客户端直接与DataNode进行通信，
+    DataNode还会与其它DataNode通信，复制这些块以实现冗余。
+
+    文件块（ block）： 最基本的存储单位。
+    对于文件内容而言，一个文件的长度大小是size，那么从文件的０偏移开始，按照固定的大小，顺序对文件进行划分并编号，划分好的每一个块称一个Block。 HDFS默认Block大小是128MB， 因此，一个256MB文件，共有256/128=2个Block.
+    与普通文件系统不同的是，在 HDFS中，如果一个文件小于一个数据块的大小，并不占用整个数据块存储空间。
+    Replication：多复本。默认是三个。通过hdfs-site.xml的dfs.replication属性进行设置。
+
+二、数据备份
+    HDFS通过【备份数据块】的形式来实现容错，除了文件的最后一个数据块外，其它所有数据块大小都是一样的。
+    数据块的大小和备份因子都是可以配置的。
+
+    NameNode负责各个数据块的备份，DataNode会通过心跳的方式定期的向NameNode发送自己节点上的Block 报告，
+    这个报告中包含了DataNode节点上的所有数据块的列表。
+
+    在Hadoop中，如果副本数量是3的情况下，Hadoop默认是这么存放的，把第一个副本放到机架的一个节点上，
+    另一个副本放到同一个机架的另一个节点上，把最后一个节点放到不同的机架上。
+    这种策略减少了跨机架副本的个数提高了写的性能，也能够允许一个机架失败的情况，算是一个很好的权衡。
+
+三、HDFS中的沟通协议
+　　所有的HDFS中的沟通协议都是基于tcp/ip协议，一个客户端通过指定的tcp端口与NameNode机器建立连接，
+    并通过ClientProtocol协议与NameNode交互。而DataNode则通过DataNode Protocol协议与NameNode进行沟通。
+    HDFS的RCP(远程过程调用)对ClientProtocol和DataNode Protocol做了封装。
+    按照HDFS的设计，NameNode不会主动发起任何请求，只会被动接受来自客户端或DataNode的请求。
+
+四、可靠性保证
+    可以允许DataNode失败。DataNode会定期（默认3秒）的向NameNode发送心跳，
+    【若NameNode在指定时间间隔内没有收到心跳，它就认为此节点已经失败】。
+    此时，NameNode把失败节点的数据（从另外的副本节点获取）备份到另外一个健康的节点。这保证了集群始终维持指定的副本数。
+
+    可以检测到数据块损坏。在读取数据块时，HDFS会对数据块和保存的校验和文件匹配，如果发现不匹配，NameNode同样会重新备份损坏的数据块。
+
+五、数据存储操作过程剖析
+1、数据存储： block
+    默认数据块大小为128MB，可配置。若文件大小不到128MB，则单独存成一个block。
+
+    为何数据块如此之大？
+        数据传输时间超过寻道时间（高吞吐率）
+    一个文件存储方式？
+        按大小被切分成若干个block，存储到不同节点上，默认情况下【每个block有三个副本】。
+
+    HDFS Block的设计理念：一个文件由哪些块组成。一个块存储在哪些节点上。好处：易于分摊到各个节点。如下：
+        block1:node1,node2,node3
+        block2:node2,node3,node4
+        block3:node4,mode5,node6
+        block4:node5,node6.node7
+
+2、数据存储： staging
+    HDFS client上传数据到HDFS时，首先，在本地缓存数据，当数据达到一个block大小时，请求NameNode分配一个block。
+     NameNode会把block所在的DataNode的地址告诉HDFS client。 HDFS client会直接和DataNode通信，
+     把数据写到DataNode节点一个block文件中。
+
+3、数据存储：读文件操作
+    1.首先调用FileSystem对象的open方法，其实是一个DistributedFileSystem的实例。
+    2.DistributedFileSystem通过rpc获得文件的第一批block的locations，同一个block按照重复数会返回多个locations，这些locations按照hadoop拓扑结构排序，距离客户端近的排在前面。
+
+    3.前两步会返回一个FSDataInputStream对象，该对象会被封装DFSInputStream对象，DFSInputStream可 以方便的管理datanode和namenode数据流。客户端调用read方法，DFSInputStream最会找出离客户端最近的datanode 并连接。
+
+    4.数据从datanode源源不断的流向客户端。
+
+    5.如果第一块的数据读完了，就会关闭指向第一块的datanode连接，接着读取下一块。这些操作对客户端来说是透明的，客户端的角度看来只是读一个持续不断的流。
+
+    6.如果第一批block都读完了， DFSInputStream就会去namenode拿下一批block的locations，然后继续读，如果所有的块都读完，这时就会关闭掉所有的流。
+    如果在读数据的时候， DFSInputStream和datanode的通讯发生异常，就会尝试正在读的block的排序第二近的datanode,并且会记录哪个 datanode发生错误，剩余的blocks读的时候就会直接跳过该datanode。 DFSInputStream也会检查block数据校验和，如果发现一个坏的block,就会先报告到namenode节点，然后 DFSInputStream在其他的datanode上读该block的镜像。
+
+该设计就是客户端直接连接datanode来检索数据并且namenode来负责为每一个block提供最优的datanode， namenode仅仅处理block location的请求，这些信息都加载在namenode的内存中，hdfs通过datanode集群可以承受大量客户端的并发访问。
+六、数据存储：写文件操作剖析
+    1.客户端通过调用DistributedFileSystem的create方法创建新文件。
+
+    2.DistributedFileSystem通过RPC调用namenode去创建一个没有blocks关联的新文件，创建前， namenode会做各种校验，比如文件是否存在，客户端有无权限去创建等。如果校验通过， namenode就会记录下新文件，否则就会抛出IO异常。
+
+    3.前两步结束后，会返回FSDataOutputStream的对象，与读文件的时候相似， FSDataOutputStream被封装成DFSOutputStream。DFSOutputStream可以协调namenode和 datanode。客户端开始写数据到DFSOutputStream，DFSOutputStream会把数据切成一个个小的packet，然后排成队 列data quene。
+
+    4.DataStreamer会去处理接受data quene，它先询问namenode这个新的block最适合存储的在哪几个datanode里（比如重复数是3，那么就找到3个最适合的 datanode），把他们排成一个pipeline。DataStreamer把packet按队列输出到管道的第一个datanode中，第一个 datanode又把packet输出到第二个datanode中，以此类推。
+
+    5.DFSOutputStream还有一个对列叫ack quene，也是由packet组成，等待datanode的收到响应，当pipeline中的所有datanode都表示已经收到的时候，这时akc quene才会把对应的packet包移除掉。
+    如果在写的过程中某个datanode发生错误，会采取以下几步：
+    1) pipeline被关闭掉；
+    2)为了防止防止丢包ack quene里的packet会同步到data quene里；
+    3)把产生错误的datanode上当前在写但未完成的block删掉；
+    4)block剩下的部分被写到剩下的两个正常的datanode中；
+    5)namenode找到另外的datanode去创建这个块的复制。当然，这些操作对客户端来说是无感知的。
+
+    6.客户端完成写数据后调用close方法关闭写入流。
+
+    7.DataStreamer把剩余得包都刷到pipeline里，然后等待ack信息，收到最后一个ack后，通知datanode把文件标视为已完成。
+
+    注意：客户端执行write操作后，写完的block才是可见的，正在写的block对客户端是不可见的，只有 调用sync方法，客户端才确保该文件的写操作已经全部完成，当客户端调用close方法时，会默认调用sync方法。是否需要手动调用取决你根据程序需 要在数据健壮性和吞吐率之间的权衡。
+
+
+七、hdfs文件删除过程
+    hdfs文件删除过程一般需要如下几步：
+
+    1. 一开始删除文件，NameNode只是重命名被删除的文件到/trash目录，因为重命名操作只是元信息的变动，所以整个过程非常快。
+    在/trash中文件会被保留一定间隔的时间（可配置，默认是6小时），在这期间，文件可以很容易的恢复，恢复只需要将文件从/trash移出即可。
+    2. 当指定的时间到达，NameNode将会把文件从命名空间中删除
+    3. 标记删除的文件块释放空间，HDFS文件系统显示空间增加
+
+
+hdfs 常用命令
+1、ls 列出hdfs文件系统根目录下的目录和文件
+     hadoop fs -ls  /
+     hadoop fs -ls -R /  : 列出hdfs文件系统所有的目录和文件
+2、-mkdir ：创建文件夹。
+    hadoop fs -mkdir hdfs://localhost:9000/user/
+3、put 上传文件
+    hadoop fs -put 本地文件或目录  hdfs上目录
+    hdfs file的父目录一定要存在，否则命令不会执行,其实只是上传一个文件，重名了名而已
+    hadoop fs -put C:\bigdata\student.json hdfs://localhost:9000/user/wcinput
+
+4、get
+    local file不能和 hdfs file名字不能相同，否则会提示文件已存在，没有重名的文件会复制到本地
+    hadoop fs -get < hdfs file or dir > ... < local  dir >
+
+5、修改权限
+    hdfs dfs -chmod -R 755 /tmp
+
+5、查看文件系统目录：
+    去localhost:50070查看文件系统的目录，点击utilities -> browse the file system。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
