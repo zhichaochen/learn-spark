@@ -182,6 +182,7 @@ hdfs 常用命令
 
 6、查看某个文件：
     >hadoop fs -cat /user/sourcedata/thankful.txt
+    或者 ：hdfs dfs -text /user/result/json part*
 
 7、删除某个文件
     删除文件   bin/hdfs dfs -rm output2/*

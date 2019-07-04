@@ -1,0 +1,105 @@
+参考文章 ：https://www.cnblogs.com/importbigdata/p/10765543.html
+一、Hive的几种数据模型
+内部表 (Table 将数据保存到Hive 自己的数据仓库目录中：/usr/hive/warehouse)
+外部表 (External Table 相对于内部表，数据不在自己的数据仓库中，只保存数据的元信息)
+分区表 (Partition Table将数据按照设定的条件分开存储，提高查询效率，分区----->  目录)
+桶表 (Bucket Table本质上也是一种分区表，类似 hash 分区   桶 ----> 文件)
+视图表 (视图表是一个虚表，不存储数据，用来简化复杂的查询)
+注意:内部表删除表后数据也会删除，外部表数据删除后不会从hdfs中删除
+
+1. 内部表/管理表
+    每一个Table在Hive中都有一个相应的目录存储数据，所有的Table数据都存储在该目录
+    具体表操作参考原文。
+
+2、外部表的使用场景
+   原始日志文件或同时被多个部门同时操作的数据集，需要使用外部表
+   如果不小心将meta data删除了，HDFS上的数据还在，可以恢复，增加了数据的安全性
+
+    注意:使用insert插入数据时会产生临时表，重新连接后会表会小时，因此大批量插入数据时不建议用insert
+    tips1:在hdfs的hive路径下以.db结尾的其实都是实际的数据库
+    tips2:默认的default数据库就在hive的家目录
+   
+3. 分区表
+    区表通常分为静态分区表和动态分区表，前者需要导入数据时静态指定分区，后者可以直接根据导入数据进行分区。
+    分区的好处是可以让数据按照区域进行分类，避免了查询时的全表扫描。
+
+    注意:在外部分区表中，如果将表删除了，重建表后只需要将分区加载进来即可恢复历史相关分区的数据。
+
+二、Hive的复杂数据类型的使用
+    Hive之所以能在大数据领域比较受欢迎，很大一部分原因在于相比其他SQL类存储系统支持更加复杂的数据类型。
+
+    map: (key1, value1, key2, value2, ...) 一些列的k/v对 map<int,string...>
+    struct: (var1,var2,var3...) 不同类型的值的组合 struct<abc:string,def:int...>
+    array: (var1,var2,var3...) 一种类型的值的组合 array<string...>
+    uniontype: (string,map<>,struct<>,array<>)
+
+    注意:在创建hive表时可根据需要导入的数据进行类型识别并创建适合的数据类型
+
+三、Hive的常用函数
+    1、常用函数列表
+    round()/floor()	可以将double类型转换为bigint类型
+    abs()	返回数值的绝对值
+    ucase()	将字符串转换成全是大写字母
+    reverse()	将字符串进行翻转
+    concat()	将输入的多个字符串当做一个字符串输出concat('640?wx_fmt=other171
+
+    聚合函数使用:
+
+    函数名	作用描述
+    sum()	返回所有输入求和后的值
+    avg()	计算所有输入值的平均值
+    min()/max()	计算输入值的最大和最小值
+
+    表生成函数:
+    表生成函数接收零个或者多个输入，然后产生多列或多行输出.
+
+    函数名	作用描述
+    array()	将函数内容转换成一个array<>类型
+    split(array,split)	将array<>类型按照split分割符进行分割成字符串(转义时使用\进行转义)
+    explode()	array数据类型作为输入，对数组中数据进行迭代，返回多行结果
+    collect_set()	将某字段的值进行去重汇总，产生Array类型字段
+    collect_list()	同collect_set()，但是不会对字段进行去重
+    concat_ws(split,struct)	将struct类型的字段按照split进行分割成字符串(struct仅支持string和array<>类型)
+    cast(column as type)	转换数据类型(column列转换为type类型)
+
+    注意:当split被包含在""之中的时候需要使用四个\进行转义[比如在hive -e ""中执行split函数]
+
+
+    2、常用的条件判断以及数据清洗函数
+    在使用hive处理数据过程中，通常我们需要对相关数据进行清洗转换，此时我们可能会使用一些条件判断以及默认值处理函数
+
+四、hive常用的环境变量
+
+    环境变量	含义
+    set hive.cli.print.header=true	设置查询时显示表头
+    set hive.exec.dynamic.partition=true	开启动态分区
+    set hive.exec.dynamic.partition.mode=nonstrict	设置动态分区模式为非严格
+    set hive.exec.max.dynamic.partitions.pernode = 1000	设置每个执行MR的节点上最大分区数
+    set hive.exec.max.dynamic.partitions=1000	设置所有MR节点上最大总分区数
+    SET SERDEPROPERTIES('serialization.null.format' = '\N')	设置hive空值存储方式为'\N'(此时存储在HDFS中时'\N',查询显示为NULL)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

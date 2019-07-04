@@ -43,3 +43,41 @@
 
     val indexed = indexer.fit(df).transform(df)
     indexed.show()
+
+4、spark中的 withColumn
+    使用withColumn函数增加列： withColumn函数一次只能增加一个列。
+    spark源码里有withColumns函数可以一次增加多列，但是并未开放，希望将来能开放出来。
+    data.withColumn(colName, data.col(colName).cast(DoubleType))
+    第一个参数是展示列的名称，第二个参数：data.col()：获取列的名对应的值，cast：转化类型。
+5、dataFrame中常用方法
+    参考：https://blog.csdn.net/chuan403082010/article/details/85163011
+
+    1、删除dataframe列
+    df.drop(columns=["instant","dteday"])
+
+    2、修改dataframe列名
+    暴力
+    a.columns = ['a','b','c']
+
+    较好的方法
+    a.rename(columns={'A':'a', 'B':'b', 'C':'c'}, inplace = True)
+
+    3、查看dataframe字段信息
+      a.info()
+
+    4、修改dataframe列类型
+
+      df["instant"] = df["instant"].astype("object")
+      X[['Global_active_power',"b"]] = X[['Global_active_power',"b"]].astype('float64')
+
+
+
+
+
+
+
+
+
+
+
+
