@@ -1,0 +1,77 @@
+1、打包 在idea
+    project structrue=》artifacts =》jar =》from modules with dependencies。、
+    选择 main class，找到class所在的目录。
+
+    删除多余jar包，只选择  jar名 compile output
+
+    build=》build artifacts =》选择自己的jar =》build
+    在下面目录生成jar
+    C:\git\learn-spark\src\main\java\com\wangweimin\learnspark\wordcount\learn-spark.jar
+
+2、submit
+    spark-submit --class com.wangweimin.learnspark.wordcount.SparkWordCount --master local     C:\git\learn-spark\src\main\java\com\wangweimin\learnspark\wordcount\learn-spark.jar
+    完毕。
+
+3、Spark spark-submit 提交的几种模式
+    --master yarn 相当于 --deploy-mode client，
+    也就是yarn-client模式时，后边这句--deploy-mode client可写可不写
+    如果是yarn-cluster模式，则需要写上--deploy-mode cluster
+
+
+    1、local
+     val spark = SparkSession.builder()
+          .appName("TestOfSparkContext2")
+          .master("local[2]").getOrCreate()
+    提交
+    spark-submit --class com.imooc.spark.Test.TestOfSparkContext2 --master local[2] C:\git\learn-spark\src\main\java\com\wangweimin\learnspark\wordcount\learn-spark.jar
+
+
+    2、yarn client模式提交
+    spark-submit --class com.wangweimin.learnspark.wordcount.SparkWordCount --master yarn --deploy-mode client C:\git\learn-spark\src\main\java\com\wangweimin\learnspark\wordcount\learn-spark.jar
+
+    注意：
+    spark-submit 提交jar包到yarn上的时候,数据输入路径,数据输出路径都必须是HDFS的路径,否则报错 :Input path does not exist
+
+    注意
+    本地提交:输入输出路文件在本地写法:file:///
+    输入输出文件在HDFS写法:hdfs://ip:port/
+    其中提交模式是yarn模式的时候,输入输出只能是在hdfs上操作
+
+    3、yarn cluster 模式
+    提交命令
+    spark-submit --class com.wangweimin.learnspark.wordcount.SparkWordCount --master yarn --deploy-mode cluster C:\git\learn-spark\src\main\java\com\wangweimin\learnspark\wordcount\learn-spark.jar
+
+    sql-1.0-yarnCluster.jar
+    ./bin/spark-submit \
+    --class com.imooc.spark.Test.TestOfSparkContext2OnYarn \
+    --master yarn \
+    ----deploy-mode cluster  \
+    /home/hadoop/data/jar-test/sql-3.0-onYarn.jar
+    --------------------
+
+4、错误
+    When running with master 'yarn' either HADOOP_CONF_DIR or YARN_CONF_DIR
+    must be set in the environment.
+
+    需要在环境变量中设置HADOOP_CONF_DIR or YARN_CONF_DIR
+    export HADOOP_CONF_DIR=/home/hadoop/app/hadoop-2.6.0/etc/hadoop
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

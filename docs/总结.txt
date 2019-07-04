@@ -1,1 +1,16 @@
 hbase Java API 介绍及使用示例:https://www.cnblogs.com/itboys/p/6685951.html
+1、hdfs的页面：
+    saprk job 页面：http://localhost:4040/jobs/
+    hdfs：http://localhost:50070
+
+    namenode的webUI端口：50070
+    yarn的web端口：8088
+    spark集群的web端口：8080
+    spark-job监控端口：4040
+
+
+
+
+
+
+

@@ -1,0 +1,104 @@
+键值对 RDD 通常用来进行聚合计算
+Spark 为【包含键值对类型】的 RDD 提供了一些专有的操作。这些 RDD 被称为 pair RDD1
+1、创建RDD
+    用第一个单词作为键创建出一个 pair RDD
+    val pairs = lines.map(x => (x.split(" ")(0), x))
+
+2、Pair RDD 转化操作
+    1、Pair RDD的转化操作（以键值对集合{(1, 2), (3, 4), (3, 6)}为例）
+
+    reduceByKey(func) ：合并具有相同键的值
+    rdd.reduceByKey((x, y) => x + y) {(1, 2), (3, 10)}
+
+    groupByKey() 对具有相同键的值进行分组 rdd.groupByKey() {(1,[2]),(3, [4,6])}
+    mapValues(func)  对每个值应用 函数。 rdd.mapValues(x => x+1)  每个值都加1.
+    keys() 返回一个仅包含键的 RDD rdd.keys() {1, 3, 3}
+    values() 返回一个仅包含值的 RDD rdd.values() {2, 4, 6}
+    sortByKey() 返回一个根据键排序的 RDD
+
+    2、针对两个pair RDD的转化操作（rdd = {(1, 2), (3, 4), (3, 6)}other = {(3, 9)}）
+
+    subtractByKey 删掉 RDD 中键与 other RDD 中的键相同的元素
+    例如：rdd.subtractByKey(other) {(1, 2)}
+
+    join 对两个 RDD 进行内连接 rdd.join(other)
+    {(3, (4, 9)), (3, (6, 9))}
+
+    rightOuterJoin ：这个待讨论
+    rdd.rightOuterJoin(other) {(3,(Some(4),9)),  (3,(Some(6),9))}
+
+    leftOuterJoin
+
+    cogroup 将两个 RDD 中拥有相同键的数据分组到一起
+    rdd.cogroup(other) {(1,([2],[])), (3,([4, 6],[9]))}
+
+
+
+
+5、数据分区
+    shuffle的根本原因是相同的key存在不同的节点上，按key进行聚合的时候不得不进行shuffle
+
+    是对数据集在节点间的分区进行控制。
+    在分布式程序中，通信的代价是很大的，因此控制数据分布以获得最少的网络传输可以极大地提升整体性能。
+
+    Spark 程序可以通过控制RDD 分区方式来减少通信开销。
+    注意：分区并不是对所有应用都有好处的——比如，如果给定RDD 只需要被扫描一次，我们完全没有必要对其预先进行分区处理。
+    只有当【数据集多次】在诸如【连接这种基于键的操作中使用时】，分区才会有帮助。
+
+    默认情况下，连接操作会将两个数据集中的【所有键的哈希值都求出来】，将该【哈希值相同】的记录【通过网络传到同一台机器】上，
+    然后在那台机器上对所有键相同的记录进行连接操作。
+
+    我的总结：数据本身在hdfs上，多台spark机器执行，默认会将hash值相同的记录传到同一台机器上。在那台机器上进行计算。
+
+    解决：
+    在程序开始时，对 userData 表使用 partitionBy() 转化操作，将这张表转为哈希分区，
+    向 partitionBy 传递一个 spark.HashPartitioner 对象来实现该操作。
+    val sc = new SparkContext(...)
+    val userData = sc.sequenceFile[UserID, UserInfo]("hdfs://...")
+     .partitionBy(new HashPartitioner(100)) // 构造100个分区
+     .persist()
+
+
+    中获益的操作有 cogroup()、
+    groupWith()、join()、leftOuterJoin()、rightOuterJoin()、groupByKey()、reduceByKey()、
+    combineByKey() 以及 lookup()。
+
+
+分区
+    1) Spark分布式程序中网络传输的通信代价很大，所以为了较少传输开销，需要控制RDD分区，
+    和单节点的程序需要选择使用合适的数据结构一样，Spark程序需要选择合适的分区方式
+    2) 只有数据集是基于键时，分区才会有用，Spark可以确保同一个组的键出现在同一个节点上，比如使用键的哈希值做模运算
+    3) 如果不使用分区partitionBy()，则每次调用Join()等函数都对从来不会变化的数据重新进行哈希值计算和跨节点数据清洗，效率低。
+    4) sortByKey()可以使用RangePartitioner分区，groupByKey()可以使用HashPartitioner分区
+
+
+
+spark 分区文章。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

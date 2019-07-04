@@ -10,10 +10,10 @@ spark任务提交：https://www.jianshu.com/p/90ba82d9838c
 http://www.imooc.com/article/281823
 
 基础总结：
-    spark-submit:启动Driver进程->向集群管理器申请资源->Driver将代码分为几个stage->Driver为每个stage创建一批task->分配执行
+    spark-submit:
+        启动Driver进程->向集群管理器申请资源->Driver将代码分为几个stage->Driver为每个stage创建一批task->分配执行
     stage：是根据宽窄依赖来区分的。
     job：是根据action操作来区分的。
-
     一个stage有多个分区就有多少个task，一个stage的执行快慢取决于最慢的哪一个task，stage串行执行的。
 
     2、stage是根据宽窄依赖来区分的？

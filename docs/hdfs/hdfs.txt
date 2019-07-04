@@ -164,8 +164,10 @@ hdfs 常用命令
 1、ls 列出hdfs文件系统根目录下的目录和文件
      hadoop fs -ls  /
      hadoop fs -ls -R /  : 列出hdfs文件系统所有的目录和文件
+
 2、-mkdir ：创建文件夹。
     hadoop fs -mkdir hdfs://localhost:9000/user/
+
 3、put 上传文件
     hadoop fs -put 本地文件或目录  hdfs上目录
     hdfs file的父目录一定要存在，否则命令不会执行,其实只是上传一个文件，重名了名而已
@@ -177,6 +179,13 @@ hdfs 常用命令
 
 5、修改权限
     hdfs dfs -chmod -R 755 /tmp
+
+6、查看某个文件：
+    >hadoop fs -cat /user/sourcedata/thankful.txt
+
+7、删除某个文件
+    删除文件   bin/hdfs dfs -rm output2/*
+    删除文件夹   bin/hdfs dfs -rm -r output2
 
 5、查看文件系统目录：
     去localhost:50070查看文件系统的目录，点击utilities -> browse the file system。

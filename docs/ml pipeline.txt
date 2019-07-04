@@ -9,7 +9,12 @@
     因此，对以上多个步骤、进行抽象建模，简化为流水线式工作流程则存在着可行性，对利用spark进行机器
     学习的用户来说，流水线式机器学习比单个步骤独立建模更加高效、易用。
 
-    一个pipeline 在结构上会包含一个或多个Stage，每一个 Stage 都会完成一个任务，如数据集处理转化，模型训练，参数设置或数据预测等，这样的Stage 在 ML 里按照处理问题类型的不同都有相应的定义和实现。两个主要的stage为Transformer和Estimator。Transformer主要是用来操作一个DataFrame 数据并生成另外一个DataFrame 数据，比如svm模型、一个特征提取工具，都可以抽象为一个Transformer。Estimator 则主要是用来做模型拟合用的，用来生成一个Transformer。可能这样说比较难以理解，下面就以一个完整的机器学习案例来说明spark ml pipeline是怎么构建机器学习工作流的。
+    一个pipeline 在结构上会包含一个或多个Stage，每一个 Stage 都会完成一个任务，如数据集处理转化，
+    模型训练，参数设置或数据预测等，这样的Stage 在 ML 里按照处理问题类型的不同都有相应的定义和实现。
+    两个主要的stage为Transformer和Estimator。Transformer主要是用来操作一个DataFrame 数据并生成另外一个
+    DataFrame 数据，比如svm模型、一个特征提取工具，都可以抽象为一个Transformer。
+    Estimator 则主要是用来做模型拟合用的，用来生成一个Transformer。可能这样说比较难以理解，
+    下面就以一个完整的机器学习案例来说明spark ml pipeline是怎么构建机器学习工作流的。
 
 二、使用spark ml pipeline构建机器学习工作流
 

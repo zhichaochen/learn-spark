@@ -1,0 +1,219 @@
+总结：
+    1、控制数据分布可以减少网络开销，极大地提升整体性能。
+    2、只有Pair RDD才有分区，非Pair RDD分区的值是None，
+        如果RDD只被扫描一次，没必要预先分区处理；如果RDD多次在诸如连接这种基于键的操作中使用时，分区才有作用。
+
+
+
+1、分区的3种方式
+    1、HashPartitioner
+    scala> val counts = sc.parallelize(List((1,'a'),(1,'aa'),(2,'b'),(2,'bb'),(3,'c')), 3)
+        .partitionBy(new HashPartitioner(3))
+
+    HashPartitioner确定分区的方式：partition = key.hashCode () % numPartitions
+
+    2、RangePartitioner
+    scala> val counts = sc.parallelize(List((1,'a'),(1,'aa'),(2,'b'),(2,'bb'),(3,'c')), 3)
+    .partitionBy(new RangePartitioner(3,counts))
+
+    RangePartitioner会对key值进行排序，然后将key值被划分成3份key值集合。
+
+    3、CustomPartitioner  自定义分区
+        class CustomPartitioner(numParts: Int) extends Partitioner {
+    scala> val counts = sc.parallelize(List((1,'a'),(1,'aa'),(2,'b'),(2,'bb'),(3,'c')), 3)
+    .partitionBy(new CustomPartitioner(3))
+
+2、理解hdfs 读入文件默认是怎么进行分区的。
+    Spark从HDFS读入文件的分区数默认等于HDFS文件的块数(blocks)。
+    如果我们上传一个30GB的非压缩的文件到HDFS，HDFS默认的块容量大小128MB，因此该文件在HDFS上会被分为235块(30GB/128MB)
+
+    Spark读取SparkContext.textFile()读取该文件，默认分区数等于块数即235。
+
+3、如何设置合理的分区数。
+    1、分区数越多越好吗？
+    不是的，分区数太多意味着任务数太多，每次调度任务也是很耗时的，所以分区数太多会导致总体耗时增多。
+
+    2、分区数太少会有什么影响？
+    分区数太少的话，会导致一些结点没有分配到任务；
+    另一方面，分区数少则每个分区要处理的数据量就会增大，从而对每个结点的内存要求就会提高；还有分区数不合理，会导致数据倾斜问题。
+
+    3、合理的分区数是多少？如何设置？
+        总核数=executor 的 cores * executor 的num?
+        一般合理的分区数设置为总核数的2~3倍
+
+4、spark分区原则及方法
+    尽可能是得分区的个数等于集群核心数目 ：即：分区数=executor 的 cores * executor 的num
+    无论是本地模式、Standalone模式、YARN模式或Mesos模式，我们都可以通过spark.default.parallelism来配置其默认分区个数，
+    若没有设置该值，则根据不同的集群环境确定该值
+
+    1、本地模式
+        （1）默认方式
+        setMaster("local")
+        val array = Array(1,2,3);
+        val arrayRdd:RDD[INT] = sc.parallelize(array);
+
+        这种方式默认就一个分区。
+        （2）手动方式
+        val array = Array(1,2,3)
+        val arrayRDD: RDD[Int] = sc.parallelize(array,2);
+        println(arrayRDD.getNumPartitions)
+
+        设置两个分区。
+        （3）跟local[n]有关
+        n等于几默认就是几个分区
+        如果n=* 那么分区个数就等于cpu core的个数
+
+        （4）参数控制
+        conf.set("spark.default.parallelism","5")
+
+
+    2、
+5、影响分区的算子操作
+
+6、repartition和partitionBy的区别
+    repartition 和 partitionBy 都是对数据进行重新分区，默认都是使用 HashPartitioner
+    二者之间的区别有：
+        partitionBy只能用于Pair RDD
+        都作用于Pair RDD时，结果也不一样
+
+            其实partitionBy的结果才是我们所预期的。
+            repartition 其实使用了一个随机生成的数来当作 key，而不是使用原来的key。
+
+7、repartition和coalesce的区别
+   两个算子都是对RDD的分区进行重新划分，repartition只是coalesce接口中shuffle为true的简易实现，
+    我的总结；增加分区的时候一定要设置shuffle 为 true。。
+
+    假设RDD有N个分区，需要重新划分成M个分区：
+    1、N<M。
+        一般情况下N个分区有数据分布不均匀的状况，利用HashPartitioner函数将数据重新分区为M个，这时需要将shuffle设置为true。
+        因为如果设置成false,不会进行shuffle操作,此时父RDD和子RDD之间是窄依赖,这时并不会增加RDD的分区.
+
+    2、N>M并且N和M相差不多(假如N是1000，M是100)，
+        这时可以将shuffle设置为false，不进行shuffle过程，父RDD和子RDD之间是窄依赖关系。
+        在shuffle为false的情况下，如果N<M时，coalesce是无效的。
+
+    3、如果N>M并且两者相差悬殊，
+        这时如果将shuffle设置为false，父子RDD是窄依赖关系，同处在一个Stage中，就可能造成spark程序的并行度不够，
+        从而影响性能。如果在M为1的时候，【为了使coalesce之前的操作有更好的并行度，可以将shuffle设置为true】。
+
+    总结:如果想要增加分区的时候,可以用repartition或者coalesce,true都行,
+        但是一定要有shuffle操作,分区数量才会增加,为了让该函数并行执行，通常把shuffle的值设置成true。
+
+8、实例分析。
+     需求
+    统计用户访问其未订阅主题页面的情况。
+
+    用户信息表：由(UserID,UserInfo)组成的RDD，UserInfo包含该用户所订阅的主题列表。
+    事件表：由(UserID,LinkInfo)组成的RDD，存放着每五分钟内网站各用户访问情况。
+
+    代码实现
+    val sc = new SparkContext(...)
+    val userData = sc.sequenceFile[UserID, UserInfo]("hdfs://...").persist()
+
+    def processNewLogs(logFileName: String) {
+     val events = sc.sequenceFile[UserID, LinkInfo](logFileName)
+     val joined = userData.join(events)// RDD of (UserID, (UserInfo, LinkInfo)) pairs
+     val offTopicVisits = joined.filter {
+     case (userId, (userInfo, linkInfo)) => // Expand the tuple into its components
+     !userInfo.topics.contains(linkInfo.topic)
+     }.count()
+     println("Number of visits to non-subscribed topics: " + offTopicVisits)
+    }
+    缺点
+      因为 userData 表比每五分钟出现的访问日志表 events 要大得多。
+        在每次调用时都对 userData 表进行哈希值计算和跨节点数据混洗。
+        虽然这些数据从来都不会变化。
+
+    改进代码实现
+    val userData = sc.sequenceFile[UserID,LinkInfo]("hdfs://...")
+    .partionBy(new HashPartiotioner(100))
+    .persist()
+
+    优点
+    userData表进行了重新分区，将键相同的数据都放在一个分区中。然后调用persist持久化结果数据，
+    不用每次都计算哈希和跨节点混洗。程序运行速度显著提升。
+
+
+5、分区器
+    分区器决定了RDD的分区个数及每条数据最终属于哪个分区。
+
+    （1）如果是从HDFS里面读取出来的数据，不需要分区器。因为HDFS本来就分好区了。
+    　　  分区数我们是可以控制的，但是没必要有分区器。
+    （2）非key-value RDD分区，没必要设置分区器，因为值为none，但非要设置也行
+        val testRDD = sc.textFile("C:\\Users\\Administrator\\IdeaProjects\\myspark\\src\\main\\hello.txt")
+        .flatMap(line => line.split(","))
+        .map(word => (word, 1)).partitionBy(new HashPartitioner(2))
+
+    （3）Key-value形式的时候，我们就有必要了。如：5.1
+5.1、分区器
+    参考：https://www.jianshu.com/p/f41afdd22c43
+
+     spark提供了两个分区器：HashPartitioner和RangePartitioner,它们都继承于org.apache.spark.Partitioner类并实现三个方法。
+            numPartitions: Int: 指定分区数
+            getPartition(key: Any): Int: 分区编号（0~numPartitions-1）
+            equals(): 检查分区器对象是否和其他分区器实例相同，判断两个RDD分区方式是否一样。
+    1、HashPartitioner
+        执行原理：对于给定的key，计算其hashCode，再除以分区数取余，最后的值就是这个key
+
+        val resultRDD = testRDD.reduceByKey(new HashPartitioner(2),(x:Int,y:Int) => x+ y)
+        //如果不设置默认也是HashPartitoiner，分区数跟spark.default.parallelism一样
+        println(resultRDD.partitioner)
+        println("resultRDD"+resultRDD.getNumPart
+
+    2、RangePartitioner
+        HashPartitioner分区可能导致每个分区中数据量的不均匀。
+        而RangePartitioner分区则尽量保证每个分区中数据量的均匀，将一定范围内的数映射到某一个分区内。
+        分区与分区之间数据是有序的，但分区内的元素是不能保证顺序的。
+
+        RangePartitioner分区执行原理：
+
+        1、计算总体的数据抽样大小sampleSize，计算规则是：至少每个分区抽取20个数据或者最多1M的数据量。
+        2、根据sampleSize和分区数量计算每个分区的数据抽样样本数量sampleSizePrePartition
+        3、调用RangePartitioner的sketch函数进行数据抽样，计算出每个分区的样本。
+        4、计算样本的整体占比以及数据量过多的数据分区，防止数据倾斜。
+        5、对于数据量比较多的RDD分区调用RDD的sample函数API重新进行数据抽取。
+        6、将最终的样本数据通过RangePartitoner的determineBounds函数进行数据排序分配，计算出rangeBounds。
+
+
+        val resultRDD = testRDD.reduceByKey((x:Int,y:Int) => x+ y)
+        val newresultRDD=resultRDD.partitionBy(new RangePartitioner[String,Int](3,resultRDD))
+        println(newresultRDD.partitioner)
+        println("newresultRDD"+newresultRDD.getNumPart
+        注：按照范围进行分区的，如果是字符串，那么就按字典顺序的范围划分。如果是数字，就按数据
+    3、自定义分区
+        class MyPartitoiner(val numParts:Int) extends  Partitioner{
+          override def numPartitions: Int = numParts
+          override def getPartition(key: Any): Int = {
+            val domain = new URL(key.toString).getHost
+            val code = (domain.hashCode % numParts)
+            if (code < 0) {
+              code + numParts
+            } else {
+              code
+            }
+          }
+        }
+
+        object DomainNamePartitioner {
+          def main(args: Array[String]): Unit = {
+            val conf = new SparkConf().setAppName("word count").setMaster("
+            val sc = new SparkContex
+            val urlRDD = sc.makeRDD(Seq(("http://baidu.com/test", 2),
+              ("http://baidu.com/index", 2), ("http://ali.com", 3), ("http://baidu.com/tmmmm", 4),
+              ("http://baidu.com/test", 4)))
+            //Array[Array[(String, Int)]]
+            // = Array(Array(),
+            // Array((http://baidu.com/index,2), (http://baidu.com/tmmmm,4),
+            // (http://baidu.com/test,4), (http://baidu.com/test,2), (http://ali.com,3)))
+            val hashPartitionedRDD = urlRDD.partitionBy(new HashPartitioner(2))
+            hashPartitionedRDD.glom().co
+            //使用spark-shell --jar的方式将这个partitioner所在的jar包引进去，然后测试下面的代码
+            // spark-shell --master spark://master:7077 --jars spark-rdd-1.0-SNAPSHOT.jar
+            val partitionedRDD = urlRDD.partitionBy(new MyPartitoiner(2))
+            val array = partitionedRDD.glom().collect()
+          }
+        }
+
+
+
+
