@@ -1,0 +1,7 @@
+线性模型：https://blog.csdn.net/larger5/article/details/81707571
+特征提取、转化、选取 ：https://blog.csdn.net/larger5/article/details/81700847
+机器学习工作流、交叉 - 验证方法：https://blog.csdn.net/larger5/article/details/81659967
+
+该作者写的不错。
+
+
