@@ -25,6 +25,7 @@
 
     注意:在外部分区表中，如果将表删除了，重建表后只需要将分区加载进来即可恢复历史相关分区的数据。
 
+
 二、Hive的复杂数据类型的使用
     Hive之所以能在大数据领域比较受欢迎，很大一部分原因在于相比其他SQL类存储系统支持更加复杂的数据类型。
 
@@ -79,6 +80,145 @@
     SET SERDEPROPERTIES('serialization.null.format' = '\N')	设置hive空值存储方式为'\N'(此时存储在HDFS中时'\N',查询显示为NULL)
 
 
+1、Hive的组成模块
+    Hive的模块非常类似于传统的数据库的模块
+    • HiveQL：这是Hive的数据查询语言，与SQL非常类似。
+    • 用户接口：包括shell接口，可以进行用户的交互以及网络接口与JDBC接口。JDBC接口可以用于编程，
+        与传统的数据库编程类似，使得程序可以直接使用Hive功能而无需更改
+    • Driver: 执行的驱动，用以将各个组成部分形成一个有机的执行系统，包括会话的处理，查询获取以及执行驱动
+
+    • Compiler：Hive需要一个编译器，将HiveQL语言编译成中间表示，包括对于HiveQL语言的分析，执行计划的生成以及优化等工作
+    • Execution Engine：执行引擎，在Driver的驱动下，具体完成执行操作，包括MapReduce执行，或者HDFS操作，或者元数据操作
+
+    • Metastore：用以存储元数据：存储操作的数据对象的格式信息，在HDFS中的存储位置的信息以及其他的用于数据转换的信息SerDe等
+
+元数据存储：Metastore
+• 元数据：
+– 每一个表的格式定义 – 列的类型 – 数据源定义
+– 数据划分情况 • 在Hive中，表结构定义等各种元数据保存在
+Metastore中 • Metastore用SQL的形式将元数据存储在传统的
+关系数据库中，因此可以使用任意一种关系数
+据库，例如Derby，MySQL等实现存储
+• 可以存在多个互不相关的Metastore
+
+Metastore （2） • metastore包括两个部分：服务和后台的数据存
+储。所以有几种用法：
+– Embedded metastore
+• 内嵌在客户端，不是service
+• 使用内嵌的Derby数据库，数据库每次只能打开一个会话
+– Local metastore
+• 内嵌在客户端，不是service
+• 使用本地网络上的数据库（例如mysql） – Remote metastore
+• Metastore是一个service，可以有多个
+• 使用本地网络上的数据库（例如mysql）
+
+
+
+1、内部表与外部表的区别
+    • 内表：Hive既管理元数据也管理实际数据
+        – 创建表时，数据可以已经存在
+        – 删除表时，数据也被删除
+    • 外表：Hive只管理元数据
+        – 删除表时，数据不被删除
+
+2、分区和桶
+    • Partitions：数据表可以【按照某个字段的值】划分Partition
+
+        – 例如，通过日期的方式将数据表进行划分；如果要查 某天的数据，那么只要读相应的partition就可以 了
+        – 分区数量不固定
+        – 每个分区是一个目录
+
+    • Buckets：数据存储的桶，
+    • 建表时指定桶个数，每个桶是一个文件，桶内可排 序
+    • 数据按照某个字段的值Hash后放入某个桶中
+    • 对于数据抽样、特定join的优化很有意义
+
+一、hive分区
+    以一个典型的日志分析应用为例，
+    可以依据不同的日期进行分区，这样的话，同一 天的日志记录会被存放在同一个分区中
+
+    – 针对特定分区的查询就无需涉及到其它的分区，能够提高查询的效率，只需要特定分区中的文件
+
+    – 分区不会影响在全体数据上的查询，仍可以定义在多个分区上的查询
+
+    – 分区下面可以继续定义子分区
+
+分区方法举例1
+    • 以日志信息为例，假设每条日志包含一个时间戳，可以根据日期对其进行区分，同一天的记录会被存放在同一个分区中
+
+    • 另外，除了使用日期进行分区之外，还可以根据国家进行子分区(subpartition)
+     • CREATE TABLE logs (
+        timestamp BIGINT,
+        line STRING
+        ) PARTITIONED BY (date STRING, country STRING)
+
+    • 这样的话数据空间首先是进行日期分区，然后 进行按照国家进行分区
+
+分区方法举例2
+    数据装入的时候需要显示指定分区值
+    • LOAD DATA LOCAL INPATH ‘input/hive/partitions/file1’ INTO TABLE logs PARTITION (date=‘2012-11-20’, country=‘China’)
+
+    • 从文件系统的角度来说，分区是表目录下嵌套的子目录，把文件加载到日志表之后，整个目
+        录结构依据分区以及子分区的情况可能为如下:
+        /user/hive/warehouse/logs/date=2012-10-10/country=China/file1
+        country=US/file2
+        /file3
+        /date=2012-11-20/country=China/file4
+        /file5
+        /country=Japan/file6
+
+分区方法举例3
+    • 从上面的介绍以及举例来说，在具体的物理存储位置上，Hive中的表的分区无非是在数据表目录下的子目录
+
+    • 使用下面的命令获取分表情况
+    • hive>show partitions logs;
+    • date=2012-10-10/country=China
+    • date=2012-10-10/country=US
+    • date=2012-11-20/country=China
+    • date=2012-11-20/country=Japan
+
+动态分区
+    • set hive.exec.dynamic.partition.mode=nonstrict; FROM raw_logs
+    • FROM raw_logs
+        INSERT OVERWRITE TABLE logs PARTITION(date,
+        country) SELECT logs.time, longs.level,
+        logs.message. from_unixtimestamp(logs.time,
+        'yyyy-MM-dd') ds, ‘China’;
+    • 为了防止无限增加分区，有以下参数限制
+        – hive.exec.max.dynamic.partitions.pernode (100) 每mapper/reducer可创建分区数
+        – hive.exec.max.dynamic.partitions(1000)每条QL可创建分区数
+
+分区的查询方法
+    • SELECT timestamp, date, line  FROM logs
+
+    WHERE country=‘China’;
+    • 这个时候，将只扫描country=‘China’的分区中
+    的文件，而不用扫面其它的文件，从而能够提
+    高查询效率
+    • 注意：分区中的域，例如前面的date以及
+    country并不会在具体的日志记录中出现，即日
+    志记录中并没有date以及country，date以及
+    country只用来标记对应的分区（即从物理位置
+    上来说就是标记对应的目录名字）
+===============================================================================================
+二、Hive中的桶
+    • 在Hive中可以把数据按照桶的方式存放在不同文件中，每个桶一个文件
+        – 所以，对数据的增量写入不能用桶
+    • 用于分区的字段实际上并不会在数据记录中出现，而作为桶的字段则需要在数据记录中出现
+    • 桶的优点
+        – 通过桶的方式能够获得更高的查询处理效率，
+        – 如果要JOIN的两张表在连接字段上都划分了桶（并且桶数成倍数关系），就可能可以在mapper进行JOIN
+        – 通过桶也可以提高取样的效率
+
+桶的划分1
+• 通过使用CLUSTER BY子句可以将数据记录划
+分到桶中，例如以下的对用户的划分
+• CREATE TABLE bucketed_users(id INT, name
+STRING)
+• CLUSTERED BY (id) INTO 4 BUCKETS;
+• 对于Hive来说，在分析这条语句的时候会将
+用户ID用来做Hash，然后分布到不同的桶中
+（除以桶的个数取余数）
 
 
 
@@ -89,6 +229,19 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+================================================================================================
 
 
 

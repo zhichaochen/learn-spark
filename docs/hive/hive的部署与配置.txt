@@ -67,3 +67,33 @@ HIVE的功能是将HQL翻译成MapReduce在Hadoop上执行。
 6、测试
     hive>create table test_table(id INT, name string);
     hive>show tables;
+==================================================================
+参考文章：https://blog.csdn.net/zhouzhiwengang/article/details/88191251
+1、下载 选择bin文件
+    http://mirror.bit.edu.cn/apache/hive/hive-2.3.5/
+
+2、解压至C:\bigdata ，配置环境变量
+3、Hive 配置文件  C:\bigdata\apache-hive-2.3.5-bin\conf
+    有4个默认的配置文件模板拷贝成新的文件名
+
+    hive-default.xml.template             ----->       hive-site.xml
+    hive-env.sh.template                     ----->             hive-env.sh
+    hive-exec-log4j.properties.template     ----->    hive-exec-log4j2.properties
+    hive-log4j.properties.template             ----->    hive-log4j2.properties
+
+4、新建本地目录后面配置文件用到
+    C:\hive\apache-hive-2.1.1-bin\my_hive     
+
+5、Hive需要调整的配置文件（hive-site.xml 和hive-env.sh）
+
+
+
+
+
+
+
+
+
+
+
+
