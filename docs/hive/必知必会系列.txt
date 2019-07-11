@@ -112,7 +112,13 @@ Metastore （2） • metastore包括两个部分：服务和后台的数据存
 • Metastore是一个service，可以有多个
 • 使用本地网络上的数据库（例如mysql）
 
+2、Join中的数据倾斜
+    • 数据倾斜(skew)使得某个reducer要处理的数据特别多，而其他reducer要处理的很少
 
+    • 如何控制
+    – Set hive.optimize.skewjoin=true;
+    – Set hive.skewjoin.key = key条数阈值（缺省100000） – Set hive.exec.reducers.bytes.per.reducer = 每个
+    reducer要处理的数据量阈值（缺省1G）
 
 1、内部表与外部表的区别
     • 内表：Hive既管理元数据也管理实际数据
@@ -222,10 +228,30 @@ STRING)
 
 
 
+Bucket Map Join
+    如果以下条件满足：
+    1. 要JOIN的两张表在连接字段上都划分了桶（并且桶数成倍数关系）
+    2. 有一张表的每个桶大小都小于25M
+    3. Hive.optimize.bucketmapjoin = true
+    那么，就可以在mapper进行JOIN
+
+    如果以下条件满足：
+    1. 要JOIN的两张表在连接字段上都划分了桶（并且桶数成
+    倍数关系）
+    2. 每张表都在桶上对连接字段进行了排序
+    3. Hive.optimize.bucketmapjoin = true
+    hive.optimize.bucketmapjoin.sortedmerge = true
+    那么，就可以在mapper端进行流式的sort merge
+
+Order by vs Sort by
+• Order by: 全局有序
+• Sort by: 每个reducer内部有序
+• 所以,sort by可以增加reducer的数量，在数
+据量大的时候可以加速
 
 
-
-
+hive 优化
+hive 执行过程总结：
 
 
 

@@ -1,0 +1,343 @@
+修改数据保证了行级别的原子性，
+创建Htable实例是有代价的。
+
+memStore 刷写会生成很多磁盘文件，如果文件数目达到阈值，合并过程会把他们合并成数量更少体积更大的文件。
+当合并的文件达到配置的最大存储文件大小，会触发一个region的拆分。
+hdfs 默认块的大小是64M hfile默认的大小是64kb
+一、基础知识
+1、crud
+    1、添加 add
+    通过构造Put对象调用add() 方法来添加数据。
+    如果在add()方法中添加时间戳，就形成一个cell。如果不指定时间戳，时间戳将由region 服务器设置。
+
+    KeyValue实例，代表了一个唯一的数据单元格，
+    类似一个协调系统，该系统使用行键，列族，列限定符，时间戳，指向一个单元格的值。
+
+    2、查询 get
+    List<KeyValue> get(byte[] family, byte[] qualifier)
+    Map<byte[],List<KeyValue>> getFamilyMap()
+
+    3、has
+    查询是否存在特定单元格，而不需要遍历整个集合。
+
+    4、put类提供的其他方法。
+    getRow()    返回创建Put实例时所指定的行键
+    getRowLock()    返回当前put实例的行 RowLock实例
+
+    getLockId()    返回使用 rowlock参数传递给构造函数的可选的锁ID，当未被指定时返回-1
+
+    setwriteToWAL()    允许关闭默认启用的服务器端预写日志(WAL)功能
+
+    getwriteTOWAL()    返回代表是否启用了WAL的值
+
+    getTimeStamp()    返回相应Put实例的时间戳，该值可在构造函数中由ts参数传入。当未被设定返回 Long. MAX_VALUE
+
+    heapsize()    计算当前Put实例所需的堆大小，既包含其中的数据，也包含内部数据结构所需的空间
+
+
+    isEmpty () 检测 FamilyMap是否含有任何 Keyvalue实例
+    numFamilies()查询 FamilyMap的大小，即所有的 evalue实例中列族的个数
+    size() 返回本次Put会添加的 Keyvalue实例的数量
+
+3.4 行锁
+    hbase 可以保证行锁。保证只有一个客户端能获取一行数据相应的锁。同时对该行进行修改。
+    put() 方法，服务器会在调用期间创建一个锁。
+
+    可以通过如下方法，显式的调用一个锁。
+    RowLock lockRow(byte[] row) throw IOException
+    void unlockRow(RowLock rl)  throw IOException
+3.5 扫描
+    类似于数据库的游标
+    htable.getScanner()
+
+3.5.2、ResultScanner
+    因为返回的数据可能有很多，在一次请求中发送大量数据，会占用大量的系统资源和并消耗很长时间。
+    它将每一行数据封装成一个Result实例，，将所有Result实例，放入一个迭代器中。
+    用户可以使用next(int rownum) 一次获取多行数据
+    确保在使用完毕后，调用.close() 方法关闭。
+
+    用户可以使用修改锁租约处的配置属性来修改超时时间。    lease.period
+
+    每一次next() 调用都会为每行数据生成一个单独的Rpc请求。即使使用next(int rownum)
+
+3.5.3、缓存与批量处理
+    很显然，当单元格数据较小时，这样做的性能并不会很好。
+    可以由扫描器缓存实现，默认情况，这个缓存是关闭的。
+
+    有两个层面打开：在表的层面，这个表的所有扫描实例的缓存都会生效。
+    在当前实例扫描，
+
+第四章、客户端api ：高级特性
+1、过滤器
+    get()、scan() 都支持直接访问数据，和通过指定起止行访问数据的功能。
+    可以在查询中添加更多的限制条件来减少查询的数据量。
+
+    但是这些方法缺少一些细粒度的筛选功能。
+    过滤器在客户端创建、通过rpc传送到服务器端，在服务端生效，保证被过滤掉的数据不会传送到客户端。
+    大部分实体过滤器继承FilterBase。把定义好的过滤器传递给Get或Scan实例。
+
+    各种过滤器，参考具体文章。
+
+2、计数器
+3、协处理器
+    协处理器允许用户在region服务器上运行自己的diamante。准确的说，允许用户执行region级的操作。
+    4、RegionObserver类
+    5、MasterObserver
+    6、endpoint
+4、HTablePool
+5、连接管理
+第五章、客户端api ：管理功能
+第八章、架构
+（一）、WAL（write-ahead Log）
+1、概述
+    处理过程如下：
+    1、客户端启动操作来修改数据，例如put()、delete()、increment()进行调用
+    2、每个修改封装到KeyValue对象实例，通过Rpc发送给含有匹配Region的HRegionServer。
+    3、数据写入WAL（日志文件是顺序写的，可以认为比较快）
+    4、写入内存中存储文件MemStore。
+    5、memStore达到一定量级之后，会被异步写入磁盘。
+    即使服务器完全崩溃，wal也能保证数据不丢失，因为日志文件存储在hdfs上，
+    【其他服务器】可以打开日志文件，然后回放这些修改，在其他运行正常的物理服务器上进行。
+
+2、HLog
+    实现了Wal的类叫做HLog，当region接受到一个更新操作时，可以直接将数据写入一个【共享的WAL】实例中去。
+    HLog类的核心是append()方法。
+    在put、delete、Increment中可以使用一个额外的参数集合
+（二）读路径
+    memestore 被刷写到磁盘中是小文件，major合并将文件集合中的文件合并成一个文件。此后还会不断创建小文件。
+    所有的存储文件是不可更改的，从这些文件删除一个特定的值是做不到的。
+
+（三）region 查找
+    为了让客户端找到特定主键的region,提供了两张特殊的目录表 -ROOT- 和.META.
+    -ROOT- 表用来查询所有 region的位置。root region只有一个，从不会进行拆分。从而保证类似b+树结构进行操作。
+    从.MeTa。中查找到对应行键的地址。
+
+    查找的时候会从zookeeper上缓存两个表，所以查找的时候，首先会在本地缓存的表中查找信息，
+    如果根据本地的缓存查不到rowkey对应的数据，比如缓存过期，region发生了拆分，合并或移动。
+    会从zk上查询新的地址，并在次缓存在本地。
+
+    root、meta表会被持久化到Zookeeper中。
+
+（四）region的生命周期
+    region的各种状态均由master触发，并使用AssignmentManager类进行管理。
+    这个类会从region的下线状态开始一直跟踪，并管理它的状态。
+
+    HBase 维护了每个 region 的一个状态信息，并保存在 hbase:meta 中。hbase:meta 本身region的状态信息被持久化到 ZooKeeper。
+    也可以在 HBase Master Web UI 里查看到 regions 的转换状态。以下是一个 region 可能出现的状态：
+    1. OFFLINE：region处于offline 状态，not opening
+    2. OPENING：region处于正在被opened 状态
+    3. OPEN：region处于打开状态，并且RegionServer已经通知了master
+    4. FAILED_OPEN：RegionServer未成功open这个region
+    5. CLOSING：region处于正在被关闭的状态
+    6. CLOSED：RegionServer已经关闭了region并且通知了master
+    7. FAILED_CLOSE：RegionServer close region 失败
+    8. SPLITTING：RegionServer 通知了master 当前region正在splitting
+    9. SPLIT：RegionServer通知master当前region已经完成splitting
+    10. SPLITTING_NEW：当前region由于split的原因，在被创建过程中
+    11. MERGING：RegionServer 通知master当前region正在与另一region聚合
+    12. MERGED：RegionServer 通知了master当前region已经被聚合
+    13. MERGING_NEW：当前region正在由两个region聚合中
+
+（五）复制
+    复制中最基本的架构师主推送（master-push），因为每个region服务器都有自己的WAL，所以很容易保存现在正在复制的位置。
+    每个region服务器的HLog是HBase复制的基础，如果需要将数据复制到集群，必须被保存在hdfs上。
+    每个region服务器从最老的日志开始复制，同时在zk中保存当前恢复的位置。
+    每个从集群恢复的位置可能不同，但他们处理的HLOg内容都是相同的。
+
+
+第11章。
+1、垃圾回收
+    垃圾回收时，master通常不会出现问题。
+    因为master没有过重的负载，并且实际的数据服务并不经过它。
+
+    主要针对region服务器
+    特别是写入量过大的负载，
+
+    1、memstore是存储在内存中的，客户端是在不同的时间写入数据的。那么他们的java堆空间很可能是不连续的。
+    数据很根据在【内存中停留的时间】，被保存在java堆中分代结构中的不同位置，
+
+    新插入的且快速刷写到磁盘的数据，这些数据通常是在【年轻代】中。这种空间可以快速回收，对内存管理没有影响。
+    如果插入数据较慢，对应的数据很可能被提升到了【年老代】或者【终生代】。刷写到磁盘会产生碎片化现象。
+    申请新空间时，由于碎片过多导致没有足够大的连续空间分配，Jre会重写整个堆空间，压缩可用对象，
+    这个过程会导致STW(stop the world) 导致应用程序停止。
+
+
+    年轻代占用空间在128M到512M，而老生代几乎占了所有可能堆空间，通常好几GB。
+
+    用户可以配置hbase.hregion.memstore.flush.size 来设置region的memestore刷写大小。
+    在定义表时，也可以根据不同表单独指定。
+
+    2、可以修改年轻代的空间，强烈建议在jre日志中输出垃圾回收的详细信息。
+
+2、本地memstore分配缓冲区
+    分配在年老代会使内存产生孔洞 ，减少压缩回收的关键是减少碎片。
+    MSLAB(memstore-local allocation buffers )就是为此而设计。
+    其关键在于允许从对重分配相同大小的对象。一旦这些对象分配并且最终被回收，他们将在对重留下固定大小的空洞。
+    之后调用相同大小的新对象会重新使用这些孔洞。因此不需要触发压缩回收了，而导致应用程序暂停。
+
+    MSLAB是许多大小固定的缓冲区，用来存储大小不同的KeyValue实例。
+    当一个缓冲区不能放下一个新加入的KeyValue时，系统就认为这个缓冲区已经被占满，然后创建一个新的固定大小的缓冲区。
+    使用MSLAB会【推迟】垃圾回收停顿的发生。这个特性在0.92版中被启用，
+
+    可以通过hbase.hregion.memstore.mslab.enabled配置属性来覆盖。
+
+    固定缓冲区大小由：hbase.hregion.memstore.mslab.chunksize属性控制。默认2MB。
+    如果用户需要存储更大的cell，例如100kb，就需要增加mslab的大小，容纳更多单元格。
+
+    base.hregion.memstore.mslab.allocation：设置存储缓冲区的上边界。默认值是256kb。
+    任何大于这个值的cell将会直接在java堆中申请空间。
+    如果存储了更多大于该值的KeyValue，将会加速停顿的到来。
+
+    使用mslab是有代价的
+    1、更加浪费空间，因为缓冲区都一定完全占满。
+    2、稍微慢一些，使用缓冲区，有额外的内存复制工作，所以稍微慢一些。
+
+3、压缩。
+    cpu的解压压缩时间，会比文件的从磁盘的读取和写入消耗更短的时间。还能节省存储空间。
+    1、Snappy 2、LZO 3、GZIP
+
+
+4、优化拆分和合并
+    1、管理拆分
+    通常hbase是自动处理region拆分的，一旦增长到配置的阈值，region将被拆分为两个，之后可以接受新的数据并继续增长。
+
+    可能出现问题的情况被称之为“拆分/合并风暴”、合并和拆分会在同一时间发生，引起磁盘I/O上升。
+    与其自动管理拆分，不如手动调用split 和 major_compact 命令。
+    可以通过设置这个集群的hbase.hregion.max.filesize或者在 列族级别上把表模式中对应参数设置成非常大的值来完成。
+
+    为防止手动拆分无法运行，最好不要将其设置为Long.MAX_VALUE,比如设置个合理的值 100GB
+    （如果触发的话，会导致一个小时的major合并）
+
+    好处；
+        1、手动运行命令来拆分和压缩region的好处就是可以对他们的时间进行控制。
+        在不同region上交错地运行，这样可以尽可能分散I/O负载，并且避免拆分/合并 风暴。
+
+        另一个优势就是用户能够更好地在任意时间控制那些region 可用。
+
+    2、region热点。
+    3、预拆分region
+    管理拆分能够在集群负载增加时，有效地进行负载控制。【不推荐让单个region增长到太大】
+
+    但是，在用户初始创建一张新表之后，通常只有一个region。在【创建表】的时候，最好就有【较大数量的region】。
+    用户可以在创建表的时候指定需要的region数目来达到预拆分的目的。
+
+    管理接口中的createTable()方法，和shell 中的create 命令中可以指定参数。
+    hbase提供了创建预拆分表的工具类，RegionSplitter。
+
+5、负载均衡
+    通过hbase.balancer.period属性设置。一旦均衡器启动，将会尝试均匀分配region到所有region服务器。
+
+6、合并region
+    当用户删除大量数据，并且想减少每个服务器管理的region数目。可能就需要合并region。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+八、架构
+
+8.2 存储
+8.2.2 写路径
+    当用户向 HRegionServer发起 HTable.put(Put)请求时，其会将请求交给对应的 Region实例来处理。
+    第一步是要决定数据是否需要写到由HLog类实现的预写日志中。WAL是标准的 Hadoop SequenceFile，
+    并且存储了 HLogRey实例。这些键包括序列号和实际数据，所以在服务器崩溃时可以回滚还没有持久化的数据。
+
+    一旦数据被写入到WAL中，数据就会被放到 Memstore中。
+    同时还会检查 MemStore是否已经满了，如果满了，就会被请求刷写到磁盘中去。
+    刷写请求由另外一个HRegionServer的线程处理，它会把数据写成HDFS中的一个新 HFile。
+    同时也会保存最后写入的序号，系统就知道哪些数据现在被持久化了。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

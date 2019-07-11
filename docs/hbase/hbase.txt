@@ -1,3 +1,29 @@
+hbase 的基本概念与 基本使用；https://www.cnblogs.com/swordfall/p/8737328.html
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 参考：https://blog.csdn.net/gongxifacai_believe/article/details/81151090
 windows下环境搭建：https://blog.csdn.net/m0_38075425/article/details/81281960
 
@@ -66,6 +92,9 @@ HBase 中的表特点
     Hbase表的创建的时候就必须指定列族。就像关系型数据库创建的时候必须指定具体的列是一样的。
 
     Hbase的列族不是越多越好，官方推荐的是列族最好小于或者等于3。我们使用的场景一般是1个列族。
+6、Cell
+    由{row key，columnFamily，version} 唯一确定的单元。cell中的数据是没有类型的，全部是字节码形式存储。
+    关键字：无类型、字节码
 
 四、Hbase的架构
     4.1、Client

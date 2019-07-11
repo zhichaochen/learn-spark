@@ -53,6 +53,25 @@
 检查点机制详解：
     参考文档：https://www.cnblogs.com/tongxupeng/p/10439889.html
 
+    1、cache和checkpoint的区别：
+    缓存（cache）把 RDD 计算出来然后放在内存中，但是RDD 的依赖链 也不能丢掉，
+    当某个点某个 executor 宕了，上面cache 的RDD就会丢掉，需要通过依赖链重放计算出来。
+
+    不同的是，checkpoint是把 RDD 保存在 HDFS中， 是多副本可靠存储，
+    所以依赖链就可以丢掉了，就斩断了依赖链， 是通过复制实现的高容错。
+
+    我的总结，cache保存在内存中，依赖链不能丢掉。 checkpoint 把rdd 保存在hdfs中，可以丢掉依赖链。
+    其实就是将某个Rdd保存在磁盘上，所有的依赖关系不复存在。
+
+    checkpoint是转化操作，在action的时候才会执行。
+
+    2、总结：
+    checkpoint 的机制保证了需要访问重复数据的应用 【Spark 的DAG执行行图可能很庞大，task 中计算链可能会很长】，
+    这时如果 task 中途运行出错，那么 task 的整个需要重算非常耗时，有必要将计算代价较大的 RDD checkpoint 一下
+
+    当下游 RDD 计算出错时，可以直接从 checkpoint 过的 RDD 那里读取数据继续算。
+
+
 
 
 

@@ -1,5 +1,8 @@
 参考：https://www.cnblogs.com/arjenlee/p/9692312.html
 1、什么是hive
+    官方的一句话说明了：了Apache Hive 是构建在Apache Hadoop之上的数据仓库。
+    【有助于对大型的数据集进行读、写和管理】。
+
     Hive是基于Hadoop的一个数据仓库工具，可以将结构化的数据文件映射为一张数据库表，并提供简单的sql查询功能。
     可以将sql语句转换为MapReduce任务进行运行。
 
@@ -28,14 +31,6 @@
     延展性：Hive支持用户自定义函数，用户可以根据自己的需求来实现自己的函数。
     容错：良好的容错性，节点出现问题SQL仍可完成执行。
 ===========================================================================   　　
-hive安装
-1、最简安装
-    准备工作：安装hive的机器上应该有HADOOP环境（安装目录，HADOOP_HOME环境变量）
-    安装：直接解压一个hive安装包即可
-    此时，安装的这个hive实例使用其内嵌的derby数据库作为记录元数据的数据库
-
-    此模式不便于让团队成员之间共享协作
-2、标准安装：将mysql作为元数据库
 ============================================================================
 hive使用方式：
 
@@ -76,6 +71,46 @@ hive使用方式：
     参考文档：https://blog.csdn.net/jenrey/article/details/80588493
     分区表是根据生成不同的目录，
     桶表是根据hash进行取值后 生成的文件。
+====================================================================================
+8、hive 优化
+    https://blog.csdn.net/yu0_zhang0/article/details/81776459
+8.1、hive深入剖析
+    Hive中的数据其实是存储再HDFS上的（加上LOCAL关键字则是在本地）/user/hive/warehouse/table
+    有助于对大型数据集进行读、写和管理。传统的关系型数据库已经无法满足，我们需要一个更大的仓库来帮助我们存储。
+    Hive的特征：
+    1.可通过SQL轻松访问数据的工具，从而实现数据仓库任务，如提取/转换/加载（ETL），报告和数据分析。
+    2.它可以使已经存储的数据结构化
+    3.可以直接访问存储在Apache HDFS™或其他数据存储系统（如Apache HBase™）中的文件
+    4.Hive除了支持MapReduce计算引擎，还支持Spark和Tez这两中分布式计算引擎（这里会引申出一个问题，哪些查询跑mr哪些不跑？）
+    5.它提供类似sql的查询语句HiveQL对数据进行分析处理。
+    6. 数据的存储格式有多种，比如数据源是二进制格式， 普通文本格式等等
+
+8.2、SQL转化为MapReduce的过程
+   了解了MapReduce实现SQL基本操作之后，我们来看看Hive是如何将SQL转化为MapReduce任务的，整个编译过程分为六个阶段：
+
+   1、Antlr定义SQL的语法规则，完成SQL词法，语法解析，将SQL转化为抽象语法树AST Tree
+   2、遍历AST Tree，抽象出查询的基本组成单元QueryBlock
+   3、遍历QueryBlock，翻译为执行操作树OperatorTree
+   4、逻辑层优化器进行OperatorTree变换，合并不必要的ReduceSinkOperator，减少shuffle数据量
+   5、遍历OperatorTree，翻译为MapReduce任务
+   6、物理层优化器进行MapReduce任务的变换，生成最终的执行计划
+
+https://tech.meituan.com/2014/02/12/hive-sql-to-mapreduce.html
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

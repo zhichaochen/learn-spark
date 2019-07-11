@@ -1,0 +1,474 @@
+https://blog.csdn.net/lvhuiyin/article/details/76708767
+这篇文章总结的HBase权威指南，很值得一看。
+
+hbase 中把每一列看做一条记录，rowId+列名，作为key，data作为value，依次存放，如果某列没有数据，直接跳过。
+比如这样的结构：1+name  王伟敏
+    1+age  28
+    1+sex 男
+    2+name 王丽敏
+    2+age 25
+    2+sex 女
+
+接下来研究的东西，redis、kafka、zookeeper
+
+================HRegionServer================================
+一般一台服务器运行一个HRegionServer。一个HRegionServer负责管理多个HRegion
+HRegionServer 服务器， 主要负责客户端的I/o请求，想Hdfs系统中读写数据。
+
+HRegionServer包含一个HLog和多个Hregion。
+HLog部分保存着用户操作hbase日志，用户操作首先记录达到HLOg，然后再更新到MemStore。
+
+
+HRegion代表【一张表的一部分数据】。hbase在管理HRegion的时候会给每个HRegion定义一个Rowkey的范围，
+【落在特定范围内的数据】将交给【特定的Region】，从而将负载分摊到多个节点。
+
+HBase会【自动调节Region所处的位置】，如果一个【HRegionServer过热】，即大量的请求落在这个HRegionServer管理的HRegion上，
+HBase就会把【HRegion移动到相对空闲的其它节点】，依次保证集群环境被充分利用。
+
+HRegion 中有多个store，每个store 存储一个列族的数据。
+每个store 包括一个memstore 、和多个storeFile（存储实际数据，最小的存储单元。）
+
+HLog存储在hdfs上，当前服务器挂掉，Master会感知到，通知其他服务器，读取Hlog数据进行恢复。
+
+数据首先写入memstore填满后，会将数据持久化到storeFile.
+storeFile达到一个数量，会把多个storeFile合并成一个storeFile。
+一个HRegion过大，会被拆分为两个HRegion。
+storefile合并有两种方式：
+minor and major. 这两种 compaction 方式的区别是
+1、 Minor（麦呐） 操作只用来做部分文件的合并操作以及包括 minVersion=0 并且设置 ttl 的过期版本清理，不做任何删除数据、多版本数据的清理工作。
+2、 Major（梅值）操作是对 Region 下的 HStore 下的所有 StoreFile 执行合并操作，最终的结果是整理合并出一个文件。
+
+hbase 中不涉及数据的直接删除和更新操作，所有的数据均通过追加的方式进行更新。
+数据的删除和更新在hbase合并的时候进行，当storeFIle达到一定数量，会触发合并操作。
+=================================================================
+
+============     HMaster        =====================
+HMaster负责管理所有的HRegionServer，它本身并不存储任何数据，而只是存储数据到HRegionServer的映射关系（元数据）
+
+HMaster的主要任务是告诉每个HRegionServer它要维护哪些HRegion。
+每个HRegionServer都会和HMaster进行通信。
+
+当一台新的HRegionServer注册到HMaster服务器时，HMaster会告诉它先等待分配数据。
+当一台HRegionServer 死机，HMaster会把它负责的HRegion【标记为未分配】。然后分配到其他HRegionServer。
+HMaster通过zk来保证单点故障和 只有一个master在运行。
+
+HMaster在功能上主要负责Table表和HRegion的管理工作，具体包括：
+
+1、管理用户对Table表的增、删、改、查操作；
+2、管理HRegion服务器的负载均衡，调整HRegion分布；
+3、在HRegion分裂后，负责新HRegion的分配；
+4、在HRegion服务器停机后，负责失效HRegion服务器上的HRegion迁移。
+=====================================================================
+参考：hbase工作原理_hbase超详细介绍：http://www.elecfans.com/emb/608272.html
+
+
+
+
+
+
+
+
+
+
+
+四、 HBase读写流程
+1、写操作流程
+步骤1：Client通过Zookeeper的调度，向HRegionServer发出写数据请求，在HRegion中写数据。
+
+步骤2：数据被写入HLog、写入HRegion的MemStore。
+
+步骤3：达到一定阈值，MemStore中的数据被Flush成一个StoreFile。
+
+步骤4：随着StoreFile文件的不断增多，当其数量增长到一定阈值后，触发Compact合并操作，
+    将多个StoreFile合并成一个StoreFile，同时进行版本合并和数据删除。
+
+步骤5：StoreFiles通过不断的Compact合并操作，逐步形成越来越大的StoreFile。
+    单个StoreFile大小超过一定阈值后，触发Split操作，把当前HRegion Split成2个新的HRegion。
+    新Split出的2个子HRegion会【被HMaster分配】到相应的【HRegionServer 】上，然后父HRegion会下线，
+    使得原先1个HRegion的压力【得以分流到2个HRegion】上。
+
+2、读操作流程
+步骤1：client访问Zookeeper，查找-ROOT-表，【获取.META.表信息】。
+
+步骤2：从.META.表查找，【获取存放目标数据的HRegion信息】，从而找到对应的HRegionServer。
+
+步骤3：通过HRegionServer获取需要查找的数据。
+
+步骤4：HRegionserver的内存分为MemStore和BlockCache两部分，
+    MemStore主要用于写数据，BlockCache主要用于读数据。
+    读请求先到MemStore中查数据，查不到就到BlockCache中查，
+    再查不到就会到StoreFile上读，并把读的结果放入BlockCache。
+
+
+
+五、hbase删除原理
+HBase 的删除操作【并不会立即】将数据【从磁盘上删除】，这主要是因为 HBase 的数据【通常被保存在 HDFS】 之中，
+而 HDFS 只允许新增或者追加数据文件，所以删除操作主要是对要被删除的数据打上标记。
+
+HFile 中保存了已经排序过的 KeyValue 数据，KeyValue 类的数据结构如下：
+
+{
+    keylength,
+    valuelength,
+    key: {
+        rowLength,
+        row (i.e., the rowkey),
+        columnfamilylength,
+        columnfamily,
+        columnqualifier,
+        timestamp,
+        keytype (e.g., Put, Delete, DeleteColumn, DeleteFamily)
+    }
+    value
+｝
+
+当执行删除操作时，HBase 新插入一条相同的 KeyValue 数据，但是使 keytype=Delete，这便意味着数据被删除了，
+直到发生 Major_compaction 操作时，数据才会被真正的从磁盘上删除。
+
+我的理解：被删除的数据被打上删除标记，查询的时候，会过滤掉该条数据，合并的时候，标记为删除的数据参会真正删除。
+    先新增再删除，都会写入日志文件，如果以后恢复也不影响。大不了先新增再删除被。
+
+
+六、hbase工作原理
+1、Client
+    一个请求产生时，HBase Client使用RPC（远程过程调用）机制与HMaster和HRegionServer进行通信，
+    对于管理类操作，Client与HMaster进行RPC;
+    对于数据读写操作，Client与HRegionServer进行RPC。
+
+2、Zookeeper
+    HBase Client使用RPC（远程过程调用）机制与HMaster和HRegionServer进行通信，但如何寻址呢？
+    由于Zookeeper中存储了-ROOT-表的地址和HMaster的地址，所以需要先到Zookeeper上进行寻址。
+
+    HRegionServer也会把自己以Ephemeral方式注册到Zookeeper中，
+    使HMaster可以【随时感知到各个HRegionServer的健康状态】。
+    此外，Zookeeper也【避免了HMaster的单点故障】。
+
+3、HMaster
+    当用户需要进行【Table】和【Region】的【管理工作】时，就【需要和HMaster进行通信】。
+    HBase中可以启动多个HMaster，通过Zookeeper的Master EleTIon机制保证总有一个Master运行。
+    主要负责对表和Region的管理。
+    1、管理用户对Table的增删改查操作
+    2、管理HRegionServer的负载均衡，调整Region的分布
+    3、在Region Split后，负责新Region的分配
+    4、在HRegionServer停机后，负责失效HRegionServer上的Regions迁移
+
+4、HRegionServer
+    （自动分区，扩展和负载均衡的基本单位成为region）
+    当用户需要对【数据进行读写操作时】，需要【访问HRegionServer】。
+    HRegionServer存取一个子表时，会创建一个HRegion对象，然后对表的每个列族创建一个Store实例，
+    每个Store都会有一个 MemStore和0个或多个StoreFile与之对应，每个StoreFile都会对应一个HFile，
+    HFile就是实际的存储文件（存储在hdfs上）。
+    因此，一个HRegion有【多少个列族就有多少个Store】。 一个HRegionServer会有多个HRegion和一个HLog。
+
+    当HStore存储是HBase的核心了，其中由两部分组成：【MemStore和StoreFiles】。
+    MemStore是Sorted Memory Buffer，
+    1、用户写入数据首先 会放在MemStore，
+    2、当MemStore满了以后会Flush成一个 StoreFile（实际存储在HDHS上的是HFile）
+    3、当StoreFile文件数量增长到一定阀值，就会触发Compact合并操作，并将多个StoreFile合并成
+    一个StoreFile，【合并过程中会进行版本合并和数据删除】，
+
+    因此可以看出HBase其实【只有增加数据】，所有的【更新和删除】操作都是在后续的【compact过程中进行的】，
+    这使得用户的 读写操作只要进入内存中就可以立即返回，保证了HBase I/O的高性能。
+
+六、实例讲解
+    客户端
+
+    1、客户端发起Put写请求，将put写入writeBuffer，如果是批量提交，写满缓存后自动提交
+    2、根据rowkey将put分配给不同regionserver
+
+    服务端：
+
+    1、RegionServer将put按rowkey分给不同的region
+    2、Region首先把数据写入wal
+    3、wal写入成功后，把数据写入memstore
+    4、Memstore写完后，检查memstore大小是否达到flush阀值
+    5、如果达到flush阀值，将memstore写入HDFS，生成HFile文件
+
+    HBase Compact &&Split
+
+    当StoreFile文件数量增长到一定阀值，就会触发Compact合并操作，并将多个StoreFile合并成一个StoreFile，
+    当这个StoreFile大小超过一定阀值后，会触发Split操作，同时把当前Region Split成2个Region，
+    这时旧的Region会下线，新Split出的2个Region会被HMaster分配到相应的HregionServer上，
+    使得原先1个Region的压力得以分散到2个Region上。
+
+    HFile
+
+    HBase中【所有的数据文件】都存储在【Hadoop HDFS】上，主要包括两种文件类型：
+    1、Hfile:HBase中KeyValue数据的存储格式，HFile是Hadoop的 二进制格式文件，
+        实际上StoreFile就是对Hfile做了轻量级包装，即StoreFile底层就是HFile
+    2、HLog File:HBase中WAL（write ahead log）的存储格式，物理上是Hadoop的【Sequence File】
+        HFile文件是不定长的，长度固定的只有其中的两块：Trailer和FileInfo。
+        Trailer中有指针指向其他数据块的起始点，FileInfo记录了文件的一些meta信息。
+        Data Block是hbase io的基本单元，为了提高效率，HRegionServer中有基于LRU的block cache机制。
+
+    每个Data块的大小可以在创建一个Table的时候通过参数指定（默认块大小64KB），
+    【大号的Block有利于顺序Scan，小号的 Block利于随机查询】。
+    每个Data块除了开头的Magic以外就是一个个KeyValue对拼接而成，Magic内容就是一些随机数字，【目的是防止数 据损坏】，
+
+
+    HLog Replay （Log 回放）
+    当HRegionServer意外终止 后，
+    1、HMaster会通过Zookeeper感知到
+    2、HMaster首先会处理遗留的Hlog文件，将其中【不同Region的Log数据进行拆分】，分别【放到相应Region的目录下】，
+    3、再将失效的Region重新分配，
+    4、领取到这些Region的Regionserver在Load Region的过程中，会发现历史HLog需要处理，
+        因此Replay HLog中的数据到MemStore中，然后flush到StoreFiles，完成数据恢复。
+
+    HLog存储格式
+    WAL（Write Ahead Log）：RegionServer在处理插入和删除过程中，用来记录操作内容的日志，
+    只有日志写入成功，才会通知客户端操作成功。
+
+    HLog文件就是一个普通的Hadoop Sequence File。包括
+    1、HLogKey：中记录了写入数据的归属信息，包括：1、table  2、Region，3、sequence number 4、timestamp，
+    其中：timestamp是”写入时间”，sequence number 的起始值为0，或者是最近一次存入文件系统中的sequence number。
+    2、Value：是HBase的【KeyValue对象昂】，即对应HFile中的KeyValue。
+
+八、客户端API：基础知识
+参考：https://blog.csdn.net/lvhuiyin/article/details/76708767（该文章基本上是权威指南的简化。还是非常值得一看的。）
+
+1、概述
+    1、Hbase主要的客户端接口是有org.apache.hadoop.hbase.client，通过这个类用户可以向Hbase存储和检索数据。
+    2、所有修改数据的操作都【保证了行级别的原子性】
+    3、创建HTable实例是有代价的，每个实例都需要扫描.META.表，以检查该表是否存在，是否可用，以及一些其他操作，
+    因此推荐用户在每个线程（在开始时）【只创建一次HTable实例】，而后在客户端应用的生存期内复用这个对象，
+    如果用户【需要使用多个HTable】实例，应考虑【使用HTablePool】类
+
+2、curd操作
+1 put方法：向Hbase存储数据
+    1）调用HTable的put方法格式：
+    void put（Put put）或void put(List<put> puts)
+
+    2）KeyValue类
+    数据和坐标都是以java的byte[]形式存储的，使用这种类型的目的是允许存储任意类型的数据
+
+    3）客户端的写缓冲区
+    每一个put操作实际上都是一个RPC操作，它将客户端数据传送到服务器后返回，这只适合小数据量的操作。
+    Hbase的API配备了一个客户端的写缓冲区（write buffer），缓冲区负责收集put操作，然后调用RPC操作一次性将put送往服务器，
+
+    全局交换机制控制着该缓冲区是否在使用，其方法如：void setAutoFlush(boolean autoFlush)
+    默认情况下，客户端缓冲区是禁用的，可以【通过将autoflush设置为false来激活缓冲区】，
+    通过setBufferSize（long size）来配置客户端写缓冲区的大小，默认大小是2M。
+
+    为每一个用户创建的HTable实例都设置缓冲器大小十分麻烦，可以在hbase-site.xml中添加一个较大的预设值，配置如下
+    <property>
+        <name>hbase.client.write.value</name>
+        <value>20971520</value>
+    </property>
+
+
+    当需要强制把数据写到服务器端时，用flushCommit()函数
+    隐式刷写：在用户调用put（）或setBufferSize（）时触发，这两个方法都会将目前占用的缓冲区大小和用户配置的缓冲区大小进行比较，
+        此外调用HTable的close（）也会无条件地隐式刷写
+    用户可以通过访问ArrayList<Put> getWriteBuffer（）来访问客户端写缓冲区的内容
+    如果用户只存储大单元格，那么客户端缓冲区的作用就不大了
+
+    4）Put列表
+    调用void put(List<put> puts)时，客户端先把所有的Put实例插入到本地写缓冲区中，
+    然后隐式的调用flushCache（），如果其中有失败的Put实例（有些检查是在客户端完成的，如确认Put实例的内容是否为null或是否指定了列），
+    那么后面的Put实例不会被添加到缓冲区，也不会触发刷写命令，
+    当使用基于列表的Put调用时，用户需要特别注意：用户无法控制服务器执行put的顺序，如果要保证写入的顺序，需要小心地使用这个操作。
+
+
+    5)原子性操作compare-and-set （只能检查和修改同一行数据）
+    有一种特别的put调用，其能保证自身操作的原子性：checkAndPut（row，family，qualifier，value，Put put），
+    有一种特别的检查通过checkAndPut（）调用来完成，即只有在另外一个值不存在的情况下，才执行这个修改，
+    要执行这种操作只需要将参数value设置为null
+
+2、get方法：客户端获取已存储数据的方法
+    1）单行Get
+    构造Get实例：
+    Get（rowkey）
+    Get（rowkey，RowLock rowLock）
+    可以通过多种标准筛选目标数据：
+    Get addFamily（family）：只能取得一个指定的列族
+    Get addColumn（family，qualifier）：获取指定的列
+    Get setTimeRange（long minStamp，long masStamp）、
+    Get setTimeStamp（long timeStamp）
+    Get setMaxVersions（int maxVersions）
+
+    2）result类
+    get（）返回的结果包含所有匹配的单元格数据，被封装成一个Result类
+    常用方法：
+    byte[] getValue(family,qualifier)：取得特定单元格的值
+    byte[] value()：返回第一列对应的最新单元格的值
+    byte[] getRow（）：返回行健
+    int size（）：检查是否有对应的记录
+    boolean isEmpty（）：检查是否有对应的记录
+    KeyValue[] raw()
+    List<KeyValue> list（）：用户可以方便的迭代数据
+    List<KeyValue> getColumn（family，qualifier）
+    KeyValue getColumnLatest（family，qualifier）
+    boolean containsColumn（family，qualifier）
+    NavigableMap<byte[],NavigableMap[],NavigableMap<Long,byte[]>>> getMap():
+        把请求返回的内容都装入一个Map类实例中，可以遍历所有结果
+
+    3）get列表
+    Result[] get(List<Get> gets);
+    boolean exists(Get get)：查看存储的数据是否存在
+    getRowOrBefore（row,family）：
+
+3 删除方法
+    1）单行删除
+    void delete（Delete delete）
+    Delete实例构造方法
+    Delete（rowkey）
+    Delete（rowkey，long timestamp，RowLock rowLock）
+    常用方法
+    Delete deleteFamily（family[,long timestamp]）
+    Delete deleteColumns（family，qualifier[,long timestamp]）:没指定timestamp，则删除所有版本
+    Delete deleteColumn（family，qualifier[,long timestamp]）:没指定timestamp，则删除最新版本
+
+
+    2）Delete的列表
+    void delete（List<Delete> deletes）
+
+
+    3)原子性操作compare-and-delete
+    boolean checkAndDelete（row，qualifier，value，Delete delete）
+
+4、批处理操作
+    许多基于列表的操作都是基于batch（）方法是实现的。
+        void batch（List<Row> actions,Object[] results）
+        Object[] batch(List<Row> actions)
+    注：不可以将针对同一行数据的Put和Delete操作放在同一个批处理请求中
+
+    Row是Put、Get、Delete类的父类
+    当用户使用batch（）功能时，Put实例不会被客户端写入缓冲区中缓冲，batch（）请求是同步的，会把操作直接发送给服务器
+    两种方法相同点：
+    get、put、delete操作都支持，如果执行时出现问题，客户端将抛出异常并报告问题，都不适用客户端的写缓冲区
+    不同点：
+    void batch（acitons，results）：能访问成功操作的结果，同时也可以获取远程失败的异常
+    Object[] batch（actions）：只返回客户端异常，不能访问程序执行中的部分结果
+    注：在检查结果之前，所有的批处理操作都已经执行了：即使用户收到异常，其他的操作也都已经执行了
+    批量处理可以感知暂时性错误（如NoServingRegionException）会多次重试这个操作，
+    用户可以通过调整hbase.client.retries.number配置项（默认为10）来增加或减少重试次数
+
+5 行锁
+    用户应该尽可能的避免使用行锁，如果必须使用，那么一定要节约占用锁的时间
+    Get不需要锁
+
+6、扫描
+  类似于数据库中的游标
+  ResultScanner getScanner（Scan scan）
+  ResultScanner getScanner（family）
+  ResultScanner getScanner(family,qualifier)
+  scan类的构造器
+  Scan（）
+  Scan（startRow,Filter filter）
+  Scan(startRow)
+  Scan(startRow,stopRow)
+  注：如果用户只需要数据的子集，那么限制扫面的范围就能发挥Hbase的优势，如果不读取整个列族，那么整个列族的文件都不会读取，这就是列族存储架构的优势
+  1）ResultScanner类
+  扫描操作不会通过一次RPC请求返回所有匹配的行，而是以"行"为单位进行返回
+  Result next（）
+  Result[] next（int nbRows）
+  void close（）
+  要确保尽早释放扫描器实例，当使用完ResultScanner之后应调用它的close（）方法，释放所有由扫描器控制的资源
+  就像行级锁一样，扫描器也使用同样的租约超时限制，保护其不被时效的客户端阻塞太久，通过如下配置
+  <property>
+  <name>hbase.regionserver.lease.period</name>
+  <value>120000</value>
+  </property>
+  2)缓存与批量处理
+  如果一次RPC请求可以返回多行数据，这样使用扫描器更有意义，可以由扫描器缓存实现，默认情况下，这个缓存是关闭的。可以从两个层面打开它
+  在表的层面，这个表的所有扫描器实例的缓存都会生效,用户使用一下的Htable方法设置表级的扫描器缓存：
+  void setScannerCaching(int scannerCaching)，
+  int getScannerCaching()：默认是1
+  在扫描器层面，这样只会影响当前的扫描实例，用户使用一下的Scan类的方法设置扫描器级的扫描器缓存：
+  void setCaching(int scannerCaching)
+  int getCaching()：默认是1
+  此外用户可以修改整个集群的配置
+  <property>
+  <name>hbase.client.scanner.caching</name>
+  <value>10</value>
+  </property>
+  这样所有scan的实例的扫描器缓存就都被设置为10了
+  注：当数据量非常大的行，可能超过客户端进程的内存容量，解决方法：使用Scan类的批量操作
+  setBatch(int batch)
+  int getBatch（）
+  缓存是面向行一级的操作，而批量是面向列一级的操作。
+
+
+二、底层持久化
+
+2.1 存储的工作原理
+    一个新的客户端为找到某个特定的行键：
+    1、首先需要连接ZooKeeper Qurom。
+    2、从Zookeeper检索持有-ROOT-Region的服务器名。
+    3、询问拥有-ROOT-Region的RegionServer，得到持有对应行键的.META. 表Region的服务器名。
+
+    这两个操作的结果都会被缓存下来，因此只需要查找一次。
+    最后，它就可以查询.META. 服务器，然后检索包含给定行键的Region所在的服务器。
+
+    一旦它知道了给定的行键所处的位置，比如，在哪个Region里，它也会缓存该信息，
+    同时直接连接持有该Region的HRegionServer。现在，客户端就有了去哪里获取行的完整信息而不需要再去查询.META.服务器。
+
+ 
+
+2.2 Flush机制
+
+    Flush命令会将内存数据写入存储文件否则我们必须等着它直到超过配置的flush大小才会将数据插入存储文件中。
+
+三、Region切分与合并
+    当一个Region内的存储文件超过hbase.hregion.max.filesize时，该Region就需要split为两个。该过程完成迅速，因为系统只是简单地为新Region创建两个引用文件，每个只持有原始Region一半的内容。
+
+    （1）RegionServer通过在父Region内创建切分目录来完成。之后，它会关闭该Region，这样它就不再接受任何请求。
+
+    （2）然后RegionServer开始准备生成新的Region，通过在切分目录内设置必要的文件结构来完成。
+
+    （3）现在两个子Region已经就绪，同时将会被同一个服务器并行打开。现在需要更新.META.表，将这两个Region作为可用Region对待，同时会启动对这两个Region的合并。
+
+    （4）原始Region最终会被清除，意味着它会从.META.表中删除，磁盘上它的所有文件也会被删除。最后，Master会收到关于该split的通知，通过负载平衡等将这些新的Region移动到其他服务器上。
+
+3.2 合并
+    存储文件处于严密的监控之下，这样后台进程就可以保证他们完全处于控制中。MemStore的flush操作会逐步增加磁盘上的文件数目。当数目足够多的时候，合并进程会将它们合并成规模更少但是更大的文件。
+
+四、日志
+
+      为了避免产生过多的小文件，RegionServer在未收集到足够数据flush到磁盘之前，会一直把它保存在内存中。为解决这个问题HBase采用WAL策略：每次更新之前，将数据写写到一个日志中，只有当写入成功后才通过客户端该操作成功。
+
+  4.1 概要流程
+
+      类似Mysql中的bin-log，WAL会记录下针对数据的所有变更，在内存产生问题时，可以通过日志回放，恢复到服务器宕机之前的状态。
+
+      首先，客户端发起数据更新动作，每个更新操作都会被包装为一个KeyValue对象，然后通过RPC调用发送出去，该调用到达具有对应Region的某个HRegionServer。
+
+      其次，KeyValue对象到达后，会被发送到指定的行键所对应的HRegion。数据会先写入WAL，然后存入相应的MemStore中。
+
+      最终，当MemStore达到一定大小后，或者过了特定时间段后，数据就会异步地持久化到文件系统中。在此期间都存储在内存中。WAL可以保证数据不会丢失。
+
+   
+
+  4.2 日志一致性
+
+      日志流数据的持久化过程具体如何实现，是否存在数据丢失的问题？为了能够让日志的读取可以读到服务器crash时刻最后写入的那个位置，或者尽可能接近该位置，这就需要一个feature:append支持。HBase目前会检测底层的Hadoop库是否支持synFs()或者hflush()。这是linux级别的，作用是当系统异常时commit buffer cache to disk。
+
+
+
+八、节点容灾
+    CopyTable喝Export/Import这两种方式是基于MapReduce性能不是太高；
+    Replication是一种比较常见的方式；本质上利用了endpoint协处理器对WAL日志进行顺序读取来达到备份的目的；
+    Snapshot是作用于表上，实际上针对元数据的快照，并不直接备份HFile，所以说它可以快速的将表恢复的快照的状态，从而迅速的进行数据的修复；
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
