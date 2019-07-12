@@ -13,7 +13,6 @@ object MyText {
     println(list.init) //List(a, b)
 
     println("c" :: list)
-    println(list :: "c")
 
 
   }

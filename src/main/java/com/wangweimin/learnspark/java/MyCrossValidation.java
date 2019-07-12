@@ -12,6 +12,7 @@ import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.tuning.CrossValidator;
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
+import org.apache.spark.mllib.recommendation.Rating;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -36,9 +37,9 @@ public class MyCrossValidation {
         JavaRDD<ALS.Rating> ratingsRDD = spark
                 .read().textFile("/home/hadoop/spark/spark-2.0.0-bin-hadoop2.6" +
                         "/data/mllib/als/sample_movielens_ratings.txt").javaRDD()
-                .map(new Function<String, ALS.Rating>() {
+               .map(new Function<String, ALS.Rating>() {
                     public ALS.Rating call(String str) {
-                        return Rating.parseRating(str);
+                        return null;
                     }
                 });
         //将整个数据集划分为训练集和测试集

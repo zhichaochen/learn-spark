@@ -1,5 +1,8 @@
 package com.wangweimin.learnspark.first_example
 
+import org.apache.spark.ml.feature.Word2Vec
+import org.apache.spark.sql.SparkSession
+
 object FeaturesTest1 {
   def main(args: Array[String]): Unit = {
 

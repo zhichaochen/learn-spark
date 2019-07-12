@@ -71,7 +71,9 @@
       X[['Global_active_power',"b"]] = X[['Global_active_power',"b"]].astype('float64')
 
 
-
+6、
+    1 to 10 结果是 x>= 1 && x<=10
+    1 until 10 结果是x>= 1 && x<10
 
 
 

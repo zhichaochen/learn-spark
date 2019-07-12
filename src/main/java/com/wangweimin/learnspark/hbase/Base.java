@@ -15,23 +15,23 @@ import java.io.IOException;
  * @Date 2019/7/9 15:29
  **/
 public class Base {
-    // 声明静态配置
+   /* // 声明静态配置
     static Configuration conf = null;
+    private static final HBaseAdmin admin = new HBaseAdmin();
+
     static {
+        admin = new HBaseAdmin(conf);
         conf = HBaseConfiguration.create();
         conf.set("hbase.zookeeper.quorum", "localhost");
-
-        HBaseAdmin admin = new HBaseAdmin(conf);
-
     }
 
-    /*
+    *//*
      * 创建表
      *
      * @tableName 表名
      *
      * @family 列族列表
-     */
+     *//*
     public static void creatTable(String tableName, String[] family)
             throws Exception {
         HBaseAdmin admin = new HBaseAdmin("");
@@ -48,7 +48,7 @@ public class Base {
         }
     }
 
-    /*
+    *//*
      * 为表添加数据（适合知道有多少列族的固定表）
      *
      * @rowKey rowKey
@@ -62,7 +62,7 @@ public class Base {
      * @column2 第二个列族列表
      *
      * @value2 第二个列的值的列表
-     */
+     *//*
     public static void addData(String rowKey, String tableName,
                                String[] column1, String[] value1, String[] column2, String[] value2)
             throws IOException {
@@ -91,13 +91,13 @@ public class Base {
         System.out.println("add data Success!");
     }
 
-    /*
+    *//*
      * 根据rwokey查询
      *
      * @rowKey rowKey
      *
      * @tableName 表名
-     */
+     *//*
     public static Result getResult(String tableName, String rowKey)
             throws IOException {
         Get get = new Get(Bytes.toBytes(rowKey));
@@ -114,11 +114,11 @@ public class Base {
         return result;
     }
 
-    /*
+    *//*
      * 遍历查询hbase表
      *
      * @tableName 表名
-     */
+     *//*
     public static void getResultScann(String tableName) throws IOException {
         Scan scan = new Scan();
         ResultScanner rs = null;
@@ -144,11 +144,11 @@ public class Base {
         }
     }
 
-    /*
+    *//*
      * 遍历查询hbase表
      *
      * @tableName 表名
-     */
+     *//*
     public static void getResultScann(String tableName, String start_rowkey,
                                       String stop_rowkey) throws IOException {
         Scan scan = new Scan();
@@ -177,13 +177,13 @@ public class Base {
         }
     }
 
-    /*
+    *//*
      * 查询表中的某一列
      *
      * @tableName 表名
      *
      * @rowKey rowKey
-     */
+     *//*
     public static void getResultByColumn(String tableName, String rowKey,
                                          String familyName, String columnName) throws IOException {
         HTable table = new HTable(conf, Bytes.toBytes(tableName));
@@ -200,7 +200,7 @@ public class Base {
         }
     }
 
-    /*
+    *//*
      * 更新表中的某一列
      *
      * @tableName 表名
@@ -212,7 +212,7 @@ public class Base {
      * @columnName 列名
      *
      * @value 更新后的值
-     */
+     *//*
     public static void updateTable(String tableName, String rowKey,
                                    String familyName, String columnName, String value)
             throws IOException {
@@ -224,7 +224,7 @@ public class Base {
         System.out.println("update table Success!");
     }
 
-    /*
+    *//*
      * 查询某列数据的多个版本
      *
      * @tableName 表名
@@ -234,7 +234,7 @@ public class Base {
      * @familyName 列族名
      *
      * @columnName 列名
-     */
+     *//*
     public static void getResultByVersion(String tableName, String rowKey,
                                           String familyName, String columnName) throws IOException {
         HTable table = new HTable(conf, Bytes.toBytes(tableName));
@@ -250,14 +250,14 @@ public class Base {
             System.out.println("Timestamp:" + kv.getTimestamp());
             System.out.println("-------------------------------------------");
         }
-        /*
+        *//*
          * List<?> results = table.get(get).list(); Iterator<?> it =
          * results.iterator(); while (it.hasNext()) {
          * System.out.println(it.next().toString()); }
-         */
+         *//*
     }
 
-    /*
+    *//*
      * 删除指定的列
      *
      * @tableName 表名
@@ -267,7 +267,7 @@ public class Base {
      * @familyName 列族名
      *
      * @columnName 列名
-     */
+     *//*
     public static void deleteColumn(String tableName, String rowKey,
                                     String falilyName, String columnName) throws IOException {
         HTable table = new HTable(conf, Bytes.toBytes(tableName));
@@ -278,13 +278,13 @@ public class Base {
         System.out.println(falilyName + ":" + columnName + "is deleted!");
     }
 
-    /*
+    *//*
      * 删除指定的列
      *
      * @tableName 表名
      *
      * @rowKey rowKey
-     */
+     *//*
     public static void deleteAllColumn(String tableName, String rowKey)
             throws IOException {
         HTable table = new HTable(conf, Bytes.toBytes(tableName));
@@ -293,11 +293,11 @@ public class Base {
         System.out.println("all columns are deleted!");
     }
 
-    /*
+    *//*
      * 删除表
      *
      * @tableName 表名
-     */
+     *//*
     public static void deleteTable(String tableName) throws IOException {
         HBaseAdmin admin = new HBaseAdmin(conf);
         admin.disableTable(tableName);
@@ -352,7 +352,8 @@ public class Base {
         deleteAllColumn("blog2", "rowkey1");
 
         // 删除表
-        deleteTable("blog2");
+        deleteTable("b
+        log2");
 
-    }
+    }*/
 }

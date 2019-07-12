@@ -1,5 +1,6 @@
 package com.wangweimin.learnspark.first_example
 
+import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
 import org.apache.spark.sql.SparkSession
 /**
   * 1、TF-IDF（词频-逆向文档频率）
@@ -34,17 +35,17 @@ object FeaturesTest {
     // 1.训练样本
     val sentenceData = spark.createDataFrame(
       Seq(
-        Love(1L, "I love you", 1.0),
-        Love(2L, "There is nothing to do", 0.0),
-        Love(3L, "Work hard and you will success", 0.0),
-        Love(4L, "We love each other", 1.0),
-        Love(5L, "Where there is love, there are always wishes", 1.0),
-        Love(6L, "I love you not because who you are,but because who I am when I am with you", 1.0),
-        Love(7L, "Never frown,even when you are sad,because youn ever know who is falling in love with your smile", 1.0),
-        Love(8L, "Whatever is worth doing is worth doing well", 0.0),
-        Love(9L, "The hard part isn’t making the decision. It’s living with it", 0.0),
-        Love(10L, "Your happy passer-by all knows, my distressed there is no place hides", 0.0),
-        Love(11L, "When the whole world is about to rain, let’s make it clear in our heart together", 0.0)
+//        Love(1L, "I love you", 1.0),
+//        Love(2L, "There is nothing to do", 0.0),
+//        Love(3L, "Work hard and you will success", 0.0),
+//        Love(4L, "We love each other", 1.0),
+//        Love(5L, "Where there is love, there are always wishes", 1.0),
+//        Love(6L, "I love you not because who you are,but because who I am when I am with you", 1.0),
+//        Love(7L, "Never frown,even when you are sad,because youn ever know who is falling in love with your smile", 1.0),
+//        Love(8L, "Whatever is worth doing is worth doing well", 0.0),
+//        Love(9L, "The hard part isn’t making the decision. It’s living with it", 0.0),
+//        Love(10L, "Your happy passer-by all knows, my distressed there is no place hides", 0.0),
+//        Love(11L, "When the whole world is about to rain, let’s make it clear in our heart together", 0.0)
       )
     ).toDF()
     sentenceData.show(false)
