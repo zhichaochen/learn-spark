@@ -33,6 +33,13 @@ object MyTest2 {
     df.createOrReplaceTempView("std")
     val betweenDF = sparkSession.sql("select name,age from std where age between 13 and 19")
     betweenDF.map(x=>"name:"+x(0)).show()//可以通过下标
+  //    +----------+
+  //    |     value|
+  //    +----------+
+  //    |  name:leo|
+  //    | name:jack|
+  //    |name:marry|
+  //    +----------+
     betweenDF.map(x=>"name:"+x.getAs[String]("name")).show()// 也可以通过字段处理。
 
     /**
@@ -62,6 +69,9 @@ object MyTest2 {
     df1.createOrReplaceTempView("t_students")
     val df2 = sparkSession.sql("select * from t_students order by age")
     df2.rdd.collect().foreach(row => println(row))
+      //[3,marry,17,女]
+      //[1,leo,18,男]
+      //[2,jack,19,男]
   }
   case class Student(id:Int,name:String,age:Int,sex:String)
 }

@@ -1,5 +1,11 @@
 0、小型
     fit()：调用fit来训练一个模型。
+
+    reduceByKey(func):合并相同键的值，值怎样合并，取决于func
+    以键值对集合{(1, 2), (3, 4), (3, 6)}为例
+    rdd.reduceByKey((x, y) => x + y) {(1, 2), (3, 10)}
+    两个参数表示的是 两个值之间做什么操作。
+
 1、scala中mkstring
     scala通过mkString方法把一个集合转化为一个字符串
 2、spark中map and flatMap

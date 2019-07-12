@@ -26,32 +26,41 @@ object MyTest {
 
     //下面两种方式都可以
     //val df = sparkSession.read.format("json").load("C:\\bigdata\\sourcedata\\student.json");
-    val df = sparkSession.read.json("C:\\bigdata\\sourcedata\\student.json")
+    val df = sparkSession.read.json("file:/bigdata/sourcedata/student.json")
     df.show()
+    /**
+      *当将JSON文件读入Spark时_corrupt_record错误
+      * 需要每行数据都是一个json对象
+      */
 
     //以树的形式打开schema，类型为推断出来的。
-    //df.printSchema();
+    df.printSchema();
+    //    root
+    //    |-- age: long (nullable = true)
+    //    |-- id: long (nullable = true)
+    //    |-- name: string (nullable = true)
+    //    |-- sex: string (nullable = true)
 
     //查找某些列
-    //df.select("name","age").show()
+    df.select("name","age").show()
 
-    //df.select($"name",$"age"+1).show()
+    df.select($"name",$"age"+1).show()
 
-    //df.filter($"age" > 20).show()
+    df.filter($"age" > 20).show()
 
-    //df.groupBy("sex").count.show()
+    df.groupBy("sex").count.show()
 
     //==============================================
     /**
       * 以上是df的操作，接下来我们的sql的方式与df进行交互
       */
     // 创建全局临时视图，就是表名，默认库位global_temp
-    //df.createOrReplaceTempView("student")
+    df.createOrReplaceTempView("student")
 
 
-    //sparkSession.sql("select * from student").show();
+    sparkSession.sql("select * from student").show();
 
-    //创建ds，和rdd类似，有两种途径，一种df转，一种集合转
+    //【创建ds】，和rdd类似，有两种途径，一种df转，一种集合转
     val ds1 = Seq(1,2,3).toDS()
     ds1.show()
 
@@ -60,5 +69,5 @@ object MyTest {
       .json("C:\\bigdata\\sourcedata\\student.json").as[Student]
     stuDs.show()
   }
-  case class Student(id:Long,name:String,age:Int,set:String)
+  case class Student(id:Long,name:String,age:Long,sex:String)
 }
