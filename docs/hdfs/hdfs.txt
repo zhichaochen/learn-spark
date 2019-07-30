@@ -1,20 +1,86 @@
 参考：https://www.cnblogs.com/duanxz/p/3874009.html
 参考：https://blog.csdn.net/wypersist/article/details/79757242
+深入理解hdfs，看这一篇就够了。https://blog.csdn.net/sjmz30071360/article/details/79877846
 1、分区容错性：单台服务器，或多台服务器出问题（主要是网络问题）后，正常服务的服务器依然能正常提供服务，并且满足设计好的一致性和可用性。
 重点在于：部分服务器因网络问题，业务依然能够继续运行。
 分区：是指在分布式系统中，不同的节点分布在不同的子网络（机房，或者异地网络等。）
 
 总结：
-1、所有元信息，都保存在NameNode中。
+1、所有元信息，都保存在NameNode中（内存中）。
 2、DataNode会通过心跳的方式定期的向NameNode发送自己节点上的Block，心跳信息中包含了所【存储文件块列表信息】
 
-一、hdfs体系结构
-1、Namenode是整个文件系统的管理节点。它维护着整个文件系统的文件目录树，文件/目录的元信息和每个文件对应的数据块列表, 接收用户的操作请求。
+零、设计原则
+1、设计目标
+    存储非常大的文件：这里非常大指的是几百M、G、或者TB级别。
+    采用流式的数据访问方式:
+    运行于商业硬件上: Hadoop不需要特别贵的、reliable的（可靠的）机器，可运行于普通商用机器
+2、 HDFS不适合的应用类型
+    1） 低延时的数据访问
+    对延时要求在毫秒级别的应用，不适合采用HDFS。HDFS是为高吞吐数据传输设计的,因此可能牺牲延时。
+    HBase更适合低延时的数据访问。
+
+    2）大量小文件
+    文件的【元数据】（如目录结构，文件block的节点列表，block-node mapping）【保存在NameNode的内存中】，
+    【整个文件系统的文件数量会受限于NameNode的内存大小】。
+    经验而言，一个文件/目录/文件块一般占有150字节的元数据内存空间。如果有100万个文件，每个文件占用1个文件块，则需要大约300M的内存。
+    因此十亿级别的文件数量在现有商用机器上难以支持。
+
+    3）多方读写，需要任意的文件修改
+        HDFS采用追加（append-only）的方式写入数据。【不支持文件任意offset的修改】。【不支持多个写入器（writer）】。
+一、HDFS核心概念
+0、Blocks
+    Block是磁盘操作最小的单元，读写操作均以Block为最小单元，一般为512 Byte。
+    文件系统在物理Block之上抽象了另一层概念，文件系统的Block物理磁盘的Block的整数倍。
+    HDFS的文件被拆分成block-sized的chunk，chunk作为独立单元存储
+    比Block小的文件不会占用整个Block，只会占据实际大小。例如， 如果一个文件大小为1M，则在HDFS中只会占用1M的空间，而不是128M。
+
+    为何数据块如此之大？
+            数据传输时间超过寻道时间（高吞吐率）
+            是为了最小化查找（seek）时间，控制定位文件与传输文件所用的时间比例。
+
+            我的理解：因为磁盘操作浪费时间最多的是寻到时间，定为到文件的开始，直接顺序呢读就可以了。
+            如果块小的话，存储一个大文件，会被分割成许多个小文件，多个小文件放在磁盘的不同位置，
+            自然寻道的时间也就大大增加。
+    设置过大会有什么影响？
+            我的理解：spark，mr设置读取hdfs上文件时候，一般是有多个block，就多少个分区，也就是多少个task。
+            如果设置的太大，只能在少数机器上进行计算。效率低下。
+
+    一个文件存储方式？
+            按大小被切分成若干个block，存储到不同节点上，默认情况下【每个block有三个副本】。
+
+    Block抽象的好处！！！
+        1、block的拆分使得【单个文件大小可以大于整个磁盘的容量】，构成文件的Block可以分布在整个集群，
+        2、Block的抽象也简化了存储系统，对于Block，无需关注其权限，所有者等内容（这些内容都在文件级别上进行控制）。
+        3、Block作为容错和高可用机制中的副本单元，即以Block为单位进行复制。
+
+
+    Block Caching
+        DataNode通常直接从磁盘读取数据，但是频繁使用的Block可以在内存中缓存。
+        默认情况下，一个Block只有一个数据节点会缓存。但是可以针对每个文件可以个性化配置。
+        作业调度器可以利用缓存提升性能，例如MapReduce可以把任务运行在有Block缓存的节点上。
+        用户或者应用可以向NameNode发送缓存指令（缓存哪个文件，缓存多久）， 缓存池的概念用于管理一组缓存的权限和资源。
+
+1、Namenode
+    是整个文件系统的管理节点。它维护着整个文件系统的文件目录树，文件/目录的元信息和每个文件对应的数据块列表, 接收用户的操作请求。
+
     文件包括：
     ①fsimage:元数据镜像文件。存储某一时段NameNode内存元数据信息。
     ②edits:操作日志文件。
     ③fstime:保存最近一次checkpoint的时间
     以上这些文件是保存在linux的文件系统中。通过hdfs-site.xml的dfs.namenode.name.dir属性进行设置。
+
+    namenode的工作特点：
+    1、NameNode始终在内存中保存metedata，用于处理“读请求”
+
+    2、到有“写请求到来时”，namenode会【首先写editlog到磁盘】，即向edits文件中写日志，【成功返回后，才会修改内存】，并且向客户端返回
+        我的：首先写入操作日志，其次修改内存内容，然后返回客户端。
+    3、Hadoop会维护一个fsimage文件，也就是namenode中metedata的镜像，但是【fsimage不会随时与namenode内存中的metedata保持一致】，
+    而是每隔一段时间通过合并edits文件来更新内容。
+        Secondary namenode就是用来合并fsimage和edits文件来更新namenode的metedata的。
+        我的理解：namenode内存中的metadata信息用来满足高速的读取信息，fsimage文件持久化metadata信息。
+            每隔一段时间通过edits中的信息，来更新fsimage。
+
+
     1、查看NameNode的fsimage与edits内容
     2、元信息的持久化
         在NameNode中存放元信息的文件是 fsimage。在系统运行期间所有对元信息的操作都保存在内存中并被持久化到另一个文件edits中。
@@ -92,6 +158,9 @@
     此时，NameNode把失败节点的数据（从另外的副本节点获取）备份到另外一个健康的节点。这保证了集群始终维持指定的副本数。
 
     可以检测到数据块损坏。在读取数据块时，HDFS会对数据块和保存的校验和文件匹配，如果发现不匹配，NameNode同样会重新备份损坏的数据块。
+四、HDFS HA(High Availability高可用性)
+
+
 
 五、数据存储操作过程剖析
 1、数据存储： block
@@ -99,6 +168,15 @@
 
     为何数据块如此之大？
         数据传输时间超过寻道时间（高吞吐率）
+        是为了最小化查找（seek）时间，控制定位文件与传输文件所用的时间比例。
+
+        我的理解：因为磁盘操作浪费时间最多的是寻到时间，定为到文件的开始，直接顺序呢读就可以了。
+        如果块小的话，存储一个大文件，会被分割成许多个小文件，多个小文件放在磁盘的不同位置，
+        自然寻道的时间也就大大增加。
+    设置过大会有什么影响？
+        我的理解：spark，mr设置读取hdfs上文件时候，一般是有多个block，就多少个分区，也就是多少个task。
+        如果设置的太大，只能在少数机器上进行计算。效率低下。
+
     一个文件存储方式？
         按大小被切分成若干个block，存储到不同节点上，默认情况下【每个block有三个副本】。
 
@@ -115,16 +193,28 @@
 
 3、数据存储：读文件操作
     1.首先调用FileSystem对象的open方法，其实是一个DistributedFileSystem的实例。
-    2.DistributedFileSystem通过rpc获得文件的第一批block的locations，同一个block按照重复数会返回多个locations，这些locations按照hadoop拓扑结构排序，距离客户端近的排在前面。
+    2.DistributedFileSystem通过rpc获得文件的第一批block的locations，同一个block按照重复数会返回多个locations，
+    这些locations按照hadoop拓扑结构排序，距离客户端近的排在前面。
 
-    3.前两步会返回一个FSDataInputStream对象，该对象会被封装DFSInputStream对象，DFSInputStream可 以方便的管理datanode和namenode数据流。客户端调用read方法，DFSInputStream最会找出离客户端最近的datanode 并连接。
+    3.前两步会返回一个FSDataInputStream对象，该对象会被封装DFSInputStream对象，DFSInputStream可 以方便的管理datanode和namenode数据流。
+    客户端调用read方法，DFSInputStream最会找出离客户端最近的datanode 并连接。
 
     4.数据从datanode源源不断的流向客户端。
 
-    5.如果第一块的数据读完了，就会关闭指向第一块的datanode连接，接着读取下一块。这些操作对客户端来说是透明的，客户端的角度看来只是读一个持续不断的流。
+    5.如果第一块的数据读完了，就会关闭指向第一块的datanode连接，接着读取下一块。
+    这些操作对客户端来说是透明的，客户端的角度看来只是读一个持续不断的流。
 
     6.如果第一批block都读完了， DFSInputStream就会去namenode拿下一批block的locations，然后继续读，如果所有的块都读完，这时就会关闭掉所有的流。
-    如果在读数据的时候， DFSInputStream和datanode的通讯发生异常，就会尝试正在读的block的排序第二近的datanode,并且会记录哪个 datanode发生错误，剩余的blocks读的时候就会直接跳过该datanode。 DFSInputStream也会检查block数据校验和，如果发现一个坏的block,就会先报告到namenode节点，然后 DFSInputStream在其他的datanode上读该block的镜像。
+    如果在读数据的时候， DFSInputStream和datanode的通讯发生异常，就会尝试正在读的block的排序第二近的datanode,
+    并且会记录哪个 datanode发生错误，剩余的blocks读的时候就会直接跳过该datanode。 DFSInputStream也会检查block数据校验和，
+    如果发现一个坏的block,就会先报告到namenode节点，然后 DFSInputStream在其他的datanode上读该block的镜像。
+
+    注意:
+    在读数据过程中，如果与Datanode的通信发生错误，DFSInputStream对象会尝试从下一个最佳节点读取数据，
+    并且记住该失败节点， 后续Block的读取不会再连接该节点。
+    读取一个Block之后，DFSInputStram会进行检验和验证，如果Block损坏，尝试从其他节点读取数据，并且将损坏的block汇报给Namenode。
+    客户端连接哪个datanode获取数据，是由namenode来指导的，这样可以支持大量并发的客户端请求，namenode尽可能将流量均匀分布到整个集群。
+    Block的位置信息是存储在namenode的内存中，因此相应位置请求非常高效，不会成为瓶颈。
 
 该设计就是客户端直接连接datanode来检索数据并且namenode来负责为每一个block提供最优的datanode， namenode仅仅处理block location的请求，这些信息都加载在namenode的内存中，hdfs通过datanode集群可以承受大量客户端的并发访问。
 六、数据存储：写文件操作剖析
@@ -137,6 +227,10 @@
     4.DataStreamer会去处理接受data quene，它先询问namenode这个新的block最适合存储的在哪几个datanode里（比如重复数是3，那么就找到3个最适合的 datanode），把他们排成一个pipeline。DataStreamer把packet按队列输出到管道的第一个datanode中，第一个 datanode又把packet输出到第二个datanode中，以此类推。
 
     5.DFSOutputStream还有一个对列叫ack quene，也是由packet组成，等待datanode的收到响应，当pipeline中的所有datanode都表示已经收到的时候，这时akc quene才会把对应的packet包移除掉。
+    总结：
+            1、Client向NameNode发起文件写入的请求。
+            2、NameNode根据文件大小和文件块配置情况，返回给Client它所管理部分DataNode的信息。
+            3、Client将文件划分为多个block块，并根据DataNode的地址信息，按顺序写入到每一个DataNode块中。
     如果在写的过程中某个datanode发生错误，会采取以下几步：
     1) pipeline被关闭掉；
     2)为了防止防止丢包ack quene里的packet会同步到data quene里；
