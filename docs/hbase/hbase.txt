@@ -1,29 +1,5 @@
 hbase 的基本概念与 基本使用；https://www.cnblogs.com/swordfall/p/8737328.html
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 参考：https://blog.csdn.net/gongxifacai_believe/article/details/81151090
 windows下环境搭建：https://blog.csdn.net/m0_38075425/article/details/81281960
 

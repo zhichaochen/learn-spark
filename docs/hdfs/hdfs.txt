@@ -12,7 +12,7 @@
 零、设计原则
 1、设计目标
     存储非常大的文件：这里非常大指的是几百M、G、或者TB级别。
-    采用流式的数据访问方式:
+    采用流式的数据访问方式（而不是随机读写）:
     运行于商业硬件上: Hadoop不需要特别贵的、reliable的（可靠的）机器，可运行于普通商用机器
 2、 HDFS不适合的应用类型
     1） 低延时的数据访问
@@ -70,15 +70,22 @@
     以上这些文件是保存在linux的文件系统中。通过hdfs-site.xml的dfs.namenode.name.dir属性进行设置。
 
     namenode的工作特点：
-    1、NameNode始终在内存中保存metedata，用于处理“读请求”
+    1、NameNode始终在内存中保存metadata，用于处理“读请求”
 
     2、到有“写请求到来时”，namenode会【首先写editlog到磁盘】，即向edits文件中写日志，【成功返回后，才会修改内存】，并且向客户端返回
         我的：首先写入操作日志，其次修改内存内容，然后返回客户端。
-    3、Hadoop会维护一个fsimage文件，也就是namenode中metedata的镜像，但是【fsimage不会随时与namenode内存中的metedata保持一致】，
+    3、Hadoop会维护一个fsimage文件，NameNode始终在内存中保存metadata，但是【fsimage不会随时与namenode内存中的metedata保持一致】，
     而是每隔一段时间通过合并edits文件来更新内容。
         Secondary namenode就是用来合并fsimage和edits文件来更新namenode的metedata的。
         我的理解：namenode内存中的metadata信息用来满足高速的读取信息，fsimage文件持久化metadata信息。
             每隔一段时间通过edits中的信息，来更新fsimage。
+
+    我的总结：写操作首先写入editlog，edits记录了每一次读的操作。
+    metadata：在内存中维护着元数据信息。
+    edits：某一段时间内的写操作。
+    fsimage:是metadata 存在磁盘上的快照，但是不会随时保持一致，过一段时间合并一次。
+
+    因为edits记录了写操作，那么合并的时候，通过edits信息，可以更改快照信息，就是内存中的metadata信息。
 
 
     1、查看NameNode的fsimage与edits内容

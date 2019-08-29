@@ -1,8 +1,11 @@
 https://blog.csdn.net/lvhuiyin/article/details/76708767
 这篇文章总结的HBase权威指南，很值得一看。
 
+参考：https://blog.csdn.net/whdxjbw/article/details/81107285
+
 hbase 中把每一列看做一条记录，rowId+列名，作为key，data作为value，依次存放，如果某列没有数据，直接跳过。
-比如这样的结构：1+name  王伟敏
+比如这样的结构：
+    1+name  王伟敏
     1+age  28
     1+sex 男
     2+name 王丽敏
@@ -10,55 +13,87 @@ hbase 中把每一列看做一条记录，rowId+列名，作为key，data作为v
     2+sex 女
 
 接下来研究的东西，redis、kafka、zookeeper
-
-================HRegionServer================================
-一般一台服务器运行一个HRegionServer。一个HRegionServer负责管理多个HRegion
-HRegionServer 服务器， 主要负责客户端的I/o请求，想Hdfs系统中读写数据。
-
-HRegionServer包含一个HLog和多个Hregion。
-HLog部分保存着用户操作hbase日志，用户操作首先记录达到HLOg，然后再更新到MemStore。
+============================================================
+Hbase的高可用：
+    HMaster：启动多台，通过zk保证高可用。（zk能保证请求到一个HMAster的时候，一个master挂了，自动切换到另一个。）
+    HRegion：数据会先写入HLog，持久化到hdfs。这样某个HRegionServer挂了，HMaster能感受到，而且数据可以通过HLog恢复。
 
 
-HRegion代表【一张表的一部分数据】。hbase在管理HRegion的时候会给每个HRegion定义一个Rowkey的范围，
-【落在特定范围内的数据】将交给【特定的Region】，从而将负载分摊到多个节点。
+================ HRegionServer ================================
+    一般一台服务器运行一个HRegionServer。一个HRegionServer负责管理多个HRegion
+    HRegionServer 服务器， 主要负责客户端的I/o请求，想Hdfs系统中读写数据。
 
-HBase会【自动调节Region所处的位置】，如果一个【HRegionServer过热】，即大量的请求落在这个HRegionServer管理的HRegion上，
-HBase就会把【HRegion移动到相对空闲的其它节点】，依次保证集群环境被充分利用。
+    HRegionServer包含一个HLog和多个Hregion。
+    HLog部分保存着用户操作hbase日志，用户操作首先记录达到HLog，然后再更新到MemStore。
 
-HRegion 中有多个store，每个store 存储一个列族的数据。
-每个store 包括一个memstore 、和多个storeFile（存储实际数据，最小的存储单元。）
 
-HLog存储在hdfs上，当前服务器挂掉，Master会感知到，通知其他服务器，读取Hlog数据进行恢复。
+    HRegion代表【一张表的一部分数据】。hbase在管理HRegion的时候会给每个HRegion定义一个Rowkey的范围，
+    【落在特定范围内的数据】将交给【特定的Region】，从而将负载分摊到多个节点。
 
-数据首先写入memstore填满后，会将数据持久化到storeFile.
-storeFile达到一个数量，会把多个storeFile合并成一个storeFile。
-一个HRegion过大，会被拆分为两个HRegion。
-storefile合并有两种方式：
-minor and major. 这两种 compaction 方式的区别是
-1、 Minor（麦呐） 操作只用来做部分文件的合并操作以及包括 minVersion=0 并且设置 ttl 的过期版本清理，不做任何删除数据、多版本数据的清理工作。
-2、 Major（梅值）操作是对 Region 下的 HStore 下的所有 StoreFile 执行合并操作，最终的结果是整理合并出一个文件。
+    HBase会【自动调节Region所处的位置】，如果一个【HRegionServer过热】，即大量的请求落在这个HRegionServer管理的HRegion上，
+    HBase就会把【HRegion移动到相对空闲的其它节点】，依次保证集群环境被充分利用。
 
-hbase 中不涉及数据的直接删除和更新操作，所有的数据均通过追加的方式进行更新。
-数据的删除和更新在hbase合并的时候进行，当storeFIle达到一定数量，会触发合并操作。
-=================================================================
+    HRegion 中有多个store，每个store 存储一个列族的数据。
+    每个store 包括一个memstore 、和多个storeFile（存储实际数据，最小的存储单元。）
+
+    HLog存储在hdfs上，当前服务器挂掉，Master会感知到，通知其他服务器，读取Hlog数据进行恢复。
+
+    数据首先写入memstore填满后，会将数据持久化到storeFile.
+    storeFile达到一个数量，会把多个storeFile合并成一个storeFile。
+    一个HRegion过大，会被拆分为两个HRegion。
+    storefile合并有两种方式：
+    minor and major. 这两种 compaction 方式的区别是
+    1、 Minor（麦呐） 操作只用来做部分文件的合并操作以及包括 minVersion=0 并且设置 ttl 的过期版本清理，不做任何删除数据、多版本数据的清理工作。
+    2、 Major（梅值）操作是对 Region 下的 HStore 下的所有 StoreFile 执行合并操作，最终的结果是整理合并出一个文件。
+
+    hbase 中不涉及数据的直接删除和更新操作，所有的数据均通过追加的方式进行更新。
+    数据的删除和更新在hbase合并的时候进行，当storeFIle达到一定数量，会触发合并操作。
+
+1、RegionServer 的作用：
+    1、一个RegionServer里有多个Region。
+    2、处理Client端的读写请求（根据从HMaster返回的元数据找到对应的Region来读写数据）。
+    3、管理Region的Split分裂、StoreFile的Compaction合并。
+    HRegionServer维护一个HLog
+
+============       HRegion     ========================================
+1、HRegion
+    一个HRegion里可能有1个或多个Store。
+    HRegion是分布式存储和负载的最小单元。
+    表通常被保存在多个HRegionServer的多个Region中
+
+
+====================    Store    =========================================
+Store
+    Store是存储落盘的最小单元，由内存中的MemStore和磁盘中的若干StoreFile组成。
+    一个Store里有1个或多个StoreFile和一个memStore。
+    每个Store存储一个列族。
+=======================================================
+
+
 显式提交：用户调用flushCommits()进行提交；
 隐式提交：当Write Buffer满了，客户端会自动执行提交；或者调用了HTable的close()方法时无条件执行提交操
+
+
 ============     HMaster        =====================
-HMaster负责管理所有的HRegionServer，它本身并不存储任何数据，而只是存储数据到HRegionServer的映射关系（元数据）
+    HMaster负责管理所有的HRegionServer，它本身并不存储任何数据，而只是存储数据到HRegionServer的映射关系（元数据）
 
-HMaster的主要任务是告诉每个HRegionServer它要维护哪些HRegion。
-每个HRegionServer都会和HMaster进行通信。
+    HMaster的主要任务是告诉每个HRegionServer它要维护哪些HRegion。
+    每个HRegionServer都会和HMaster进行通信。
 
-当一台新的HRegionServer注册到HMaster服务器时，HMaster会告诉它先等待分配数据。
-当一台HRegionServer 死机，HMaster会把它负责的HRegion【标记为未分配】。然后分配到其他HRegionServer。
-HMaster通过zk来保证单点故障和 只有一个master在运行。
+    当一台新的HRegionServer注册到HMaster服务器时，HMaster会告诉它先等待分配数据。
+    当一台HRegionServer 死机，HMaster会把它负责的HRegion【标记为未分配】。然后分配到其他HRegionServer。
+    HMaster通过zk来保证单点故障和 只有一个master在运行。
 
-HMaster在功能上主要负责Table表和HRegion的管理工作，具体包括：
+    HMaster在功能上主要负责Table表和HRegion的管理工作，具体包括：
 
-1、管理用户对Table表的增、删、改、查操作；
-2、管理HRegion服务器的负载均衡，调整HRegion分布；
-3、在HRegion分裂后，负责新HRegion的分配；
-4、在HRegion服务器停机后，负责失效HRegion服务器上的HRegion迁移。
+    1、负责管理HBase元数据，即表的结构、表存储的Region等元信息。
+    2、负责表的创建，删除和修改（因为这些操作会导致HBase元数据的变动）。
+    3、负责为HRegionServer分配Region，分配好后也会将元数据写入相应位置（后面会详细讲述放在哪）。
+
+    切记：HMaster不会去处理Client的读写请求，也不会存储任何数据，只负责管理元数据信息。
+
+    HMaster不会去处理Client端的数据读写请求，因为这样会加大其负载压力，具体的读写请求它会交给HRegionServer来做。
+
 =====================================================================
 参考：hbase工作原理_hbase超详细介绍：http://www.elecfans.com/emb/608272.html
 
@@ -70,64 +105,153 @@ HMaster在功能上主要负责Table表和HRegion的管理工作，具体包括�
 
 
 
+三、-ROOT-表和.META.表详解
+参考文章：https://blog.csdn.net/zz657114506/article/details/54581621
+
+0、我的总结：
+    1、这两张表也是和 我们自己创建的用户表一样，其中key 为rowkey， value 为对应的数据信息，而且也会有列族。
+    2、ROOT表只存在某一个HRegionServer上，ROOT表的地址会注册到zk上。客户端通过zk获取ROOT表地址。
+    3、 Hbase都是以Rowkey进行操作的。且HRegion中的Rowkey是有序的。
+        在两张表中都提供了startkey 和 endkey。
+        故而，rowkey进来之后，能找到.Meta.表，
+        通过.Meta. 表中的startkey 和endkey ，能找到对应的Server地址，以及HRegion的信息。
+
+        故而，找到了该条查询所对应的HRegion，然后对数据进行操作。
+
+
+1、由于HBase中的表可能非常大，故HBase会将表按行分成多个region，然后分配到多台RegionServer上。数据访问的整个流程如下图所示
+
+
+2、注意两点：
+    Client端在访问数据的过程中并没有涉及到Master节点，也就是说HBase日常的数据操作并不需要Master，不会造成Master的负担。
+    并不是每次数据访问都要执行上面的整个流程，因为很多数据都会被Cache起来。
+
+3、从存储结构和操作方法的角度来说，-ROOT-、.META.与其他表没有任何区别。
+    -ROOT-：记录.META.表的Region信息。
+    .META.：记录用户表的Region信息。
+    其中-ROOT-表本身只会有一个region，这样保证了只需要三次跳转，就能定位到任意region.
+
+4、-ROOT-表结构
+
+    1、当用户表特别大时，用户表的region也会非常多。.META.表存储了这些region信息，也变得非常大，
+        这时.META.自己也需要划分成多个Region，托管到多个RegionServer上。
+
+    2、这时就出现了一个问题：当.META.被托管在多个RegionServer上，如何去定位.META.呢？
+        HBase的做法是用另外一个表来记录.META.的Region信息，就和.META.记录用户表的Region信息一样，这个表就是-ROOT-表。
+
+    -ROOT-表除了没有historian列族之外，【-ROOT-表的结构与.META.表的结构是一样的】。另外，-ROOT-表的 RowKey 没有采用时间戳，也没有Encoded值，而是直接指定一个数字。
+
+    【-ROOT-表永远只有一个Region，也就只会存放在一台RegionServer上】。
+    —— 在进行数据访问时，需要知道管理-ROOT-表的RegionServer的地址。这个地址被存在 ZooKeeper 中。
+
+    rowkey ：
+        命名形式是：.META.,StartKey,1（我理解是meta表编号。）
+
+
+5、.META. 表结构
+    RowKey
+        RowKey就是Region Name，它的命名形式是TableName,StartKey,TimeStamp.Encoded.。
+
+        其中 Encoded 是TableName,StartKey,TimeStamp的md5值。
+
+
+        .META.表中每一行记录了一个Region的信息。
+        例如：mytable,,1438832261249.ea2b47e1eba6dd9a7121315cdf0e4f67.
+        表名是mytable，StartKey为空，时间戳是1438832261249，前面三部分的md5是：
+            $ echo -n “mytable,,1438832261249” | md5sum # -n选项表示不输出换行符
+            ea2b47e1eba6dd9a7121315cdf0e4f67 -
+
+    Column Family
+        .META.表有两个Column Family：【info】 和【 historian】。
+
+        其中info包含了三个Column
+
+            regioninfo：region的详细信息，【包括StartKey、EndKey以及Table】信息等等。
+
+            server：管理该region的 RegionServer 的地址。
+
+            serverstartcode：RegionServer 开始托管该region的时间。
+
+        historian：用来追踪一些region操作的，例如open、close、compact等。
+
+
+    综上，.META.表中保存了所有用户表的region信息，在进行数据访问时，它是必不可少的一个环节。
+    当Region被拆分、合并或者重新分配的时候，都需要来修改这张表的内容 来保证访问数据时能够正确地定位region。
+
+
+
+6、步骤：
+    1.Client请求zk集群，ROOT表在哪里啊？zk回复，它在HRegionServer 1 上。
+    2、Client查寻Root表 对应的服务器 HRegionServer 1 ，获得.META. 表所在的HRegionServer 2
+    3、Client查询 HRegionServer 2，从META表获得HRegion 所在 的 HRegionServer 3。
+    4、Client查询  HRegionServer 3，获得对应的数据所在位置。
+
+
+
+
 
 
 四、 HBase读写流程
 1、写操作流程
-步骤1：Client通过Zookeeper的调度，向HRegionServer发出写数据请求，在HRegion中写数据。
+    步骤1：Client先从缓存中定为Region，如果没有缓存则访问zk，->ROOT 表 ,->META表，定为到Region。
 
-步骤2：数据被写入HLog、写入HRegion的MemStore。
+    步骤2：数据被写入HLog、写入HRegion的MemStore。
 
-步骤3：达到一定阈值，MemStore中的数据被Flush成一个StoreFile。
+    步骤3：达到一定阈值，MemStore中的数据被Flush成一个StoreFile。
 
-步骤4：随着StoreFile文件的不断增多，当其数量增长到一定阈值后，触发Compact合并操作，
-    将多个StoreFile合并成一个StoreFile，同时进行版本合并和数据删除。
+    步骤4：随着StoreFile文件的不断增多，当其数量增长到一定阈值后，触发Compact合并操作，
+        将多个StoreFile合并成一个StoreFile，同时进行版本合并和数据删除。
 
-步骤5：StoreFiles通过不断的Compact合并操作，逐步形成越来越大的StoreFile。
-    单个StoreFile大小超过一定阈值后，触发Split操作，把当前HRegion Split成2个新的HRegion。
-    新Split出的2个子HRegion会【被HMaster分配】到相应的【HRegionServer 】上，然后父HRegion会下线，
-    使得原先1个HRegion的压力【得以分流到2个HRegion】上。
+    步骤5：StoreFiles通过不断的Compact合并操作，逐步形成越来越大的StoreFile。
+        单个StoreFile大小超过一定阈值后，触发Split操作，把当前HRegion Split成2个新的HRegion。
+        新Split出的2个子HRegion会【被HMaster分配】到相应的【HRegionServer 】上，然后父HRegion会下线，
+        使得原先1个HRegion的压力【得以分流到2个HRegion】上。
+
+    我的总结：一个请求请求到Hregion，如果StoreFile多的话，需要循环查询多个StoreFile，合并之后就只需要查询一个了。
+    当HFile太大后，里面包含的数据过大，一个查询请求，只能在一台服务器上查询数据，分成多个HRegion，就可以并发查询数据了。
+    所以，两者都是提升效率的。
 
 2、读操作流程
-步骤1：client访问Zookeeper，查找-ROOT-表，【获取.META.表信息】。
+    步骤1：client访问Zookeeper，查找-ROOT-表，【获取.META.表信息】。
 
-步骤2：从.META.表查找，【获取存放目标数据的HRegion信息】，从而找到对应的HRegionServer。
+    步骤2：从.META.表查找，【获取存放目标数据的HRegion信息】，和 HRegion所在的 HRegionServer 地址。
 
-步骤3：通过HRegionServer获取需要查找的数据。
+    步骤3：通过HRegionServer获取需要查找的数据。
 
-步骤4：HRegionserver的内存分为MemStore和BlockCache两部分，
-    MemStore主要用于写数据，BlockCache主要用于读数据。
-    读请求先到MemStore中查数据，查不到就到BlockCache中查，
-    再查不到就会到StoreFile上读，并把读的结果放入BlockCache。
+    步骤4：HRegionserver的内存分为MemStore和BlockCache两部分，
+        MemStore主要用于写数据，BlockCache主要用于读数据。
+        1、读请求先到MemStore中查数据，
+        2、查不到就到BlockCache中查，
+        3、再查不到就会到StoreFile上读，并把读的结果放入BlockCache。
 
 
 
 五、hbase删除原理
-HBase 的删除操作【并不会立即】将数据【从磁盘上删除】，这主要是因为 HBase 的数据【通常被保存在 HDFS】 之中，
-而 HDFS 只允许新增或者追加数据文件，所以删除操作主要是对要被删除的数据打上标记。
+    HBase 的删除操作【并不会立即】将数据【从磁盘上删除】，这主要是因为 HBase 的数据【通常被保存在 HDFS】 之中，
+    而 HDFS 只允许新增或者追加数据文件，所以删除操作主要是对要被删除的数据打上标记。（早期的。）
 
-HFile 中保存了已经排序过的 KeyValue 数据，KeyValue 类的数据结构如下：
+    HFile 中保存了已经排序过的 KeyValue 数据，KeyValue 类的数据结构如下：
 
-{
-    keylength,
-    valuelength,
-    key: {
-        rowLength,
-        row (i.e., the rowkey),
-        columnfamilylength,
-        columnfamily,
-        columnqualifier,
-        timestamp,
-        keytype (e.g., Put, Delete, DeleteColumn, DeleteFamily)
-    }
-    value
-｝
+    {
+        keylength,
+        valuelength,
+        key: {
+            rowLength,
+            row (i.e., the rowkey),
+            columnfamilylength,
+            columnfamily,
+            columnqualifier,
+            timestamp,
+            keytype (e.g., Put, Delete, DeleteColumn, DeleteFamily)
+        }
+        value
+    ｝
 
-当执行删除操作时，HBase 新插入一条相同的 KeyValue 数据，但是使 keytype=Delete，这便意味着数据被删除了，
-直到发生 Major_compaction 操作时，数据才会被真正的从磁盘上删除。
+    当执行删除操作时，HBase 新插入一条相同的 KeyValue 数据，但是使 keytype=Delete，这便意味着数据被删除了，
+    直到发生 Major_compaction 操作时，数据才会被真正的从磁盘上删除。
 
-我的理解：被删除的数据被打上删除标记，查询的时候，会过滤掉该条数据，合并的时候，标记为删除的数据参会真正删除。
-    先新增再删除，都会写入日志文件，如果以后恢复也不影响。大不了先新增再删除被。
+    我的理解：被删除的数据被打上删除标记，查询的时候，会过滤掉该条数据，合并的时候，标记为删除的数据参会真正删除。
+        先新增再删除，都会写入日志文件，如果以后恢复也不影响。大不了先新增再删除被。
 
 
 六、hbase工作原理
